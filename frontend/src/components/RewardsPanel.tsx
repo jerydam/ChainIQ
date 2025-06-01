@@ -1,5 +1,5 @@
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import type { UserScore } from '@/types/quiz';
 import { QuizRewardsABI } from '@/abis/QuizAbi';
@@ -12,11 +12,35 @@ interface RewardsPanelProps {
 
 export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPanelProps) {
   const [claimingRewards, setClaimingRewards] = useState<string[]>([]);
+  const [claimedNFTs, setClaimedNFTs] = useState<{ [quizId: string]: boolean }>({});
   const contractAddress = process.env.NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS || '';
 
-  const eligibleScores = userScores; // All completed quizzes are eligible for NFT
+  useEffect(() => {
+    const checkClaimedNFTs = async () => {
+      if (!isConnected || !userAddress) return;
+      try {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const contract = new ethers.Contract(contractAddress, QuizRewardsABI, provider);
+        const claimed: { [quizId: string]: boolean } = {};
+        for (const score of userScores) {
+          const quizId = score.quizId.split('-')[0];
+          const hasClaimed = await contract.hasClaimedNFT(userAddress, quizId);
+          claimed[quizId] = hasClaimed;
+        }
+        setClaimedNFTs(claimed);
+      } catch (error) {
+        console.error('Error checking claimed NFTs:', error);
+      }
+    };
+    checkClaimedNFTs();
+  }, [userScores, userAddress, isConnected]);
 
-  const totalRewardsEarned = eligibleScores.length;
+  // Only perfect scores that haven't been claimed are eligible
+  const eligibleScores = userScores.filter(
+    score => score.score === score.totalQuestions && !claimedNFTs[score.quizId.split('-')[0]]
+  );
+
+  const totalRewardsEarned = userScores.filter(score => score.score === score.totalQuestions).length;
   const totalPointsEarned = userScores.reduce((acc, score) => acc + score.score, 0);
 
   const handleClaimReward = async (scoreId: string) => {
@@ -40,12 +64,24 @@ export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPa
       const tx = await contract.claimNFTReward(quizId, {
         gasLimit: BigInt(gasEstimate) * BigInt(120) / BigInt(100),
       });
+      console.log('Transaction sent:', tx.hash);
       await tx.wait();
-
+      console.log('Transaction confirmed');
       alert('NFT reward claimed successfully! 🎉');
+
+      // Update claimed status
+      setClaimedNFTs(prev => ({ ...prev, [quizId]: true }));
     } catch (error: any) {
       console.error('Error claiming NFT reward:', error);
-      alert(`Failed to claim NFT reward: ${error.reason || error.message}`);
+      let errorMessage = 'Failed to claim NFT reward';
+      if (error.code === 'INSUFFICIENT_FUNDS') {
+        errorMessage = 'Insufficient funds for gas fees';
+      } else if (error.reason) {
+        errorMessage = error.reason;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      alert(errorMessage);
     }
 
     setClaimingRewards(claimingRewards.filter(id => id !== scoreId));
@@ -73,7 +109,7 @@ export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPa
             <div className="bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border border-yellow-500/30 rounded-xl p-6 text-center">
               <div className="text-3xl font-bold text-yellow-400 mb-2">{totalRewardsEarned}</div>
               <div className="text-white font-semibold">NFTs Earned</div>
-              <div className="text-sm text-gray-400">For completed quizzes</div>
+              <div className="text-sm text-gray-400">For perfect scores</div>
             </div>
             
             <div className="bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/30 rounded-xl p-6 text-center">
@@ -159,7 +195,7 @@ export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPa
       <div className="mt-6 bg-blue-500/20 border border-blue-500/50 rounded-xl p-4">
         <h3 className="text-lg font-bold text-white mb-3">ℹ️ Reward System</h3>
         <p className="text-sm text-gray-300">
-          Complete any quiz to earn an NFT reward, minted on the Celo blockchain!
+          Earn an NFT for achieving a perfect score on any quiz, minted on the Celo blockchain!
         </p>
       </div>
     </div>

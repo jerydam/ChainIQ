@@ -8,16 +8,15 @@ interface QuizAttempt {
   address: string;
   score: number;
   createdAt: string;
+  timeTaken: number;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { quizId, address, score } = await req.json();
-    if (!quizId || !address || typeof score !== 'number') {
-      console.error('Invalid quiz attempt data:', { quizId, address, score });
-      const response = { error: 'Invalid quiz attempt data' };
-      console.log('Returning error response:', response);
-      return new Response(JSON.stringify(response), {
+    const { quizId, address, score, timeTaken } = await req.json();
+    if (!quizId || !address || typeof score !== 'number' || typeof timeTaken !== 'number') {
+      console.error('Invalid quiz attempt data:', { quizId, address, score, timeTaken });
+      return new Response(JSON.stringify({ error: 'Invalid quiz attempt data' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -29,35 +28,28 @@ export async function POST(req: NextRequest) {
     });
 
     try {
-      console.log('Creating quiz_attempts table if not exists');
       await db.exec(`
         CREATE TABLE IF NOT EXISTS quiz_attempts (
           quizId TEXT,
           address TEXT,
           score INTEGER,
           createdAt TEXT,
-          PRIMARY KEY (quizId, address)
+          timeTaken REAL,
+          PRIMARY KEY (quizId, address, createdAt)
         )
       `);
 
-      console.log('Inserting quiz attempt into SQLite');
       await db.run(
         `
-        INSERT INTO quiz_attempts (quizId, address, score, createdAt)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO quiz_attempts (quizId, address, score, createdAt, timeTaken)
+        VALUES (?, ?, ?, ?, ?)
       `,
-        [quizId, address, score, new Date().toISOString()]
+        [quizId, address, score, new Date().toISOString(), timeTaken]
       );
-      console.log('Quiz attempt saved:', { quizId, address, score });
+      console.log('Quiz attempt saved:', { quizId, address, score, timeTaken });
     } catch (sqliteError: any) {
-      console.error('SQLite error:', {
-        message: sqliteError.message,
-        code: sqliteError.code,
-        stack: sqliteError.stack,
-      });
-      const response = { error: `Failed to save quiz attempt: ${sqliteError.message}` };
-      console.log('Returning error response:', response);
-      return new Response(JSON.stringify(response), {
+      console.error('SQLite error:', sqliteError);
+      return new Response(JSON.stringify({ error: `Failed to save quiz attempt: ${sqliteError.message}` }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -65,21 +57,13 @@ export async function POST(req: NextRequest) {
       await db.close();
     }
 
-    const response = { success: true };
-    console.log('Returning success response:', response);
-    return new Response(JSON.stringify(response), {
+    return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (error: any) {
-    console.error('Error processing quiz attempt:', {
-      message: error.message,
-      code: error.code,
-      stack: error.stack,
-    });
-    const response = { error: error.message || 'Failed to process quiz attempt' };
-    console.log('Returning error response:', response);
-    return new Response(JSON.stringify(response), {
+    console.error('Error processing quiz attempt:', error);
+    return new Response(JSON.stringify({ error: error.message || 'Failed to process quiz attempt' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -91,11 +75,9 @@ export async function GET(req: NextRequest) {
     const quizId = req.nextUrl.searchParams.get('quizId');
     const address = req.nextUrl.searchParams.get('address');
 
-    if (!quizId || !address) {
-      console.error('Missing quizId or address in query:', { quizId, address });
-      const response = { error: 'quizId and address are required' };
-      console.log('Returning error response:', response);
-      return new Response(JSON.stringify(response), {
+    if (!quizId && !address) {
+      console.error('Missing quizId or address');
+      return new Response(JSON.stringify({ error: 'quizId or address is required' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -106,28 +88,49 @@ export async function GET(req: NextRequest) {
       driver: sqlite3.Database,
     });
 
-    console.log('Fetching quiz attempt:', { quizId, address });
-    const attempt = await db.get<QuizAttempt>(
-      'SELECT * FROM quiz_attempts WHERE quizId = ? AND address = ?',
-      [quizId, address]
-    );
-    await db.close();
+    if (quizId && address) {
+      const attempt = await db.get<QuizAttempt>(
+        'SELECT * FROM quiz_attempts WHERE quizId = ? AND address = ? ORDER BY createdAt DESC LIMIT 1',
+        [quizId, address]
+      );
+      const allAttempts = await db.all<QuizAttempt>(
+        'SELECT * FROM quiz_attempts WHERE quizId = ? AND address = ? ORDER BY createdAt ASC',
+        [quizId, address]
+      );
+      await db.close();
+      return new Response(JSON.stringify({ attempt, allAttempts }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
-    const response = attempt || null;
-    console.log('Returning attempt response:', response);
-    return new Response(JSON.stringify(response), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    if (address) {
+      const allAttempts = await db.all<QuizAttempt>(
+        'SELECT * FROM quiz_attempts WHERE address = ? ORDER BY createdAt ASC',
+        [address]
+      );
+      await db.close();
+      console.log('Fetched attempts for address:', address, allAttempts);
+      return new Response(JSON.stringify({ allAttempts }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (quizId) {
+      const allAttempts = await db.all<QuizAttempt>(
+        'SELECT * FROM quiz_attempts WHERE quizId = ? ORDER BY createdAt ASC',
+        [quizId]
+      );
+      await db.close();
+      return new Response(JSON.stringify({ allAttempts }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
   } catch (error: any) {
-    console.error('Error fetching quiz attempt:', {
-      message: error.message,
-      code: error.code,
-      stack: error.stack,
-    });
-    const response = { error: error.message || 'Failed to fetch quiz attempt' };
-    console.log('Returning error response:', response);
-    return new Response(JSON.stringify(response), {
+    console.error('Error fetching quiz attempt:', error);
+    return new Response(JSON.stringify({ error: error.message || 'Failed to fetch quiz attempt' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

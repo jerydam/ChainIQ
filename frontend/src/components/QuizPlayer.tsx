@@ -24,6 +24,7 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false }) => {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [timer, setTimer] = useState(10);
   const [attemptCount, setAttemptCount] = useState(0);
+  const [startTime, setStartTime] = useState<number | null>(null); // Track quiz start time
 
   useEffect(() => {
     if (isFrame) return;
@@ -64,6 +65,7 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false }) => {
       }
     };
     initialize();
+    setStartTime(Date.now()); // Start timing when quiz loads
   }, [quiz.id, isFrame]);
 
   useEffect(() => {
@@ -119,17 +121,19 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false }) => {
 
   const submitQuiz = async () => {
     if (isFrame) return;
-
+  
     if (!walletAddress) {
       setError('Wallet not connected');
       console.log('Wallet not connected');
       return;
     }
-
+  
     setIsLoading(true);
     try {
-      console.log('Submitting attempt:', { quizId: quiz.id, score, address: walletAddress });
-
+      const endTime = Date.now();
+      const timeTaken = startTime ? (endTime - startTime) / 1000 : 0;
+      console.log('Submitting attempt:', { quizId: quiz.id, score, address: walletAddress, timeTaken });
+  
       const attemptResponse = await fetch('/api/quizAttempts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -137,9 +141,10 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false }) => {
           quizId: quiz.id,
           address: walletAddress,
           score,
+          timeTaken,
         }),
       });
-
+  
       if (!attemptResponse.ok) {
         const errorText = await attemptResponse.text();
         console.error('Failed to save attempt:', attemptResponse.status, errorText);
@@ -147,7 +152,7 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false }) => {
       }
       console.log('Attempt saved');
       setAttemptCount(attemptCount + 1);
-
+  
       if (score === quiz.questions.length) {
         setHasPerfectScore(true);
         const maxRetries = 5;
@@ -161,13 +166,13 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false }) => {
             if (network.chainId.toString() !== '44787') {
               throw new Error('Wrong network; expected Celo Alfajores (44787)');
             }
-
+  
             const contract = new ethers.Contract(
               process.env.NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS!,
               QuizRewardsABI,
               signer
             );
-
+  
             const gasEstimate = await contract.recordQuizCompletion.estimateGas(quiz.id);
             const tx = await contract.recordQuizCompletion(quiz.id, {
               gasLimit: BigInt(gasEstimate) * BigInt(120) / BigInt(100),
@@ -175,15 +180,7 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false }) => {
             console.log('recordQuizCompletion sent:', tx.hash);
             await tx.wait();
             console.log('recordQuizCompletion confirmed');
-
-            const claimGasEstimate = await contract.claimNFTReward.estimateGas(quiz.id);
-            const claimTx = await contract.claimNFTReward(quiz.id, {
-              gasLimit: BigInt(claimGasEstimate) * BigInt(120) / BigInt(100),
-            });
-            console.log('claimNFTReward sent:', claimTx.hash);
-            await tx.wait();
-            console.log('claimNFTReward confirmed');
-
+  
             break;
           } catch (err: any) {
             lastError = err;
@@ -210,12 +207,17 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false }) => {
   };
 
   const handleRetry = () => {
+    if (hasPerfectScore) {
+      setError('You have already achieved a perfect score and cannot retake this quiz.');
+      return;
+    }
     setCurrentQuestionIndex(0);
     setScore(0);
     setSelectedAnswer(null);
     setIsQuizComplete(false);
     setError(null);
     setTimer(10);
+    setStartTime(Date.now()); // Reset start time for new attempt
     console.log('Retrying quiz');
   };
 

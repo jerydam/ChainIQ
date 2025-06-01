@@ -1,9 +1,8 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import  QuizPlayer  from '@/components/QuizPlayer';
+import QuizPlayer from '@/components/QuizPlayer';
 import { QuizGenerator } from '@/components/QuizGenerator';
-import { Leaderboard } from '@/components/Leaderboard';
 import type { Quiz } from '@/types/quiz';
 import { QuizRewardsABI } from '@/abis/QuizAbi';
 import Link from 'next/link';
@@ -61,10 +60,18 @@ export default function Home() {
   const checkParticipation = async (quizId: string) => {
     if (!userAddress) return false;
     try {
+      const quizResponse = await fetch(`/api/quizzes?id=${quizId}`);
+      if (!quizResponse.ok) {
+        console.error(`Failed to fetch quiz ${quizId}`);
+        return false;
+      }
+      const quiz = await quizResponse.json();
+      const totalQuestions = quiz.questions?.length || 0;
+
       const response = await fetch(`/api/quizAttempts?quizId=${quizId}&address=${userAddress}`);
       if (response.ok) {
         const { attempt } = await response.json();
-        return attempt && attempt.score === quizId[0].questions.length; // Perfect score check
+        return attempt && attempt.score === totalQuestions;
       }
       return false;
     } catch (err: any) {
@@ -94,7 +101,6 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-black text-white py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl mx-auto">
-        {/* Header */}
         <header className="text-center mb-12">
           <h1 className="text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
             🧠 QuizChain
@@ -102,16 +108,19 @@ export default function Home() {
           <p className="mt-3 text-lg text-gray-300">
             Learn, earn, and mint NFTs on the Celo blockchain
           </p>
+          <Link href="/rewards">
+            <button className="mt-4 px-6 py-2 bg-gradient-to-r from-yellow-400 to-orange-400 hover:from-yellow-500 hover:to-orange-500 text-black font-semibold rounded-full transition-all duration-300">
+              🏆 View Rewards
+            </button>
+          </Link>
         </header>
 
-        {/* Error Message */}
         {error && (
           <div className="mb-8 p-4 bg-red-500/20 text-red-300 rounded-lg text-center">
             {error}
           </div>
         )}
 
-        {/* Wallet Connection */}
         <div className="flex justify-center mb-8">
           {userAddress ? (
             <div className="flex items-center space-x-3 bg-gray-800/50 rounded-full px-4 py-2 border border-blue-500/30">
@@ -130,7 +139,6 @@ export default function Home() {
           )}
         </div>
 
-        {/* Main Content */}
         <main>
           {selectedQuiz ? (
             <QuizPlayer quiz={selectedQuiz} />
@@ -138,7 +146,6 @@ export default function Home() {
             <QuizGenerator onQuizGenerated={handleQuizGenerated} />
           ) : (
             <div>
-              {/* Create Quiz Button */}
               <div className="flex justify-center mb-10">
                 <button
                   onClick={() => setShowGenerator(true)}
@@ -148,7 +155,6 @@ export default function Home() {
                 </button>
               </div>
 
-              {/* Quizzes Section */}
               <section>
                 <h2 className="text-3xl font-bold mb-6 text-center bg-clip-text text-transparent bg-gradient-to-r from-blue-300 to-purple-400">
                   Available Quizzes
@@ -160,22 +166,19 @@ export default function Home() {
                 ) : (
                   <div className="space-y-8">
                     {quizzes.map((quiz) => (
-                      <div key={quiz.id}>
-                        <div className="bg-gray-800/40 backdrop-blur-sm rounded-2xl p-6 border border-blue-500/20 hover:border-blue-500/50 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300">
-                          <h3 className="text-xl font-semibold text-blue-200 mb-2">{quiz.title}</h3>
-                          <p className="text-gray-300 text-sm mb-4 line-clamp-2">{quiz.description}</p>
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs text-gray-400">
-                              {participation[quiz.id] ? 'Completed (Perfect Score)' : 'Not Completed'}
-                            </span>
-                            <Link href={`/quiz/${quiz.id}`}>
-                              <button className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-medium rounded-lg shadow-md hover:shadow-lg transition-all duration-200">
-                                {participation[quiz.id] ? 'View Results' : 'Take Quiz'}
-                              </button>
-                            </Link>
-                          </div>
+                      <div key={quiz.id} className="bg-gray-800/40 backdrop-blur-sm rounded-2xl p-6 border border-blue-500/20 hover:border-blue-500/50 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300">
+                        <h3 className="text-xl font-semibold text-blue-200 mb-2">{quiz.title}</h3>
+                        <p className="text-gray-300 text-sm mb-4 line-clamp-2">{quiz.description}</p>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-gray-400">
+                            {participation[quiz.id] ? 'Completed (Perfect Score)' : 'Not Completed'}
+                          </span>
+                          <Link href={`/quiz/${quiz.id}`}>
+                            <button className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-medium rounded-lg shadow-md hover:shadow-lg transition-all duration-200">
+                              {participation[quiz.id] ? 'View Results' : 'Take Quiz'}
+                            </button>
+                          </Link>
                         </div>
-                        <Leaderboard quizId={quiz.id} />
                       </div>
                     ))}
                   </div>

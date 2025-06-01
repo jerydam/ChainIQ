@@ -92,7 +92,7 @@ export function QuizGenerator({ onQuizGenerated }: QuizGeneratorProps) {
           <select
             value={difficulty}
             onChange={(e) => setDifficulty(e.target.value as 'beginner' | 'intermediate' | 'advanced')}
-            className="w-full p-2 bg-gradient-to-r from-gray-800 to-gray-900 text-white rounded border border-gray-600 focus:border-blue-500 focus:ring focus:ring-blue-500/50 hover:bg-gradient-to-r hover:from-gray-700 hover:to-gray-800 transition-all"
+            className="w-full p-2 bg-gray-800 text-white rounded border border-gray-600 focus:border-blue-500 focus:ring focus:ring-blue-500/50 hover:bg-gradient-to-r hover:from-gray-700 hover:to-gray-800 transition-all"
           >
             <option value="beginner">Beginner</option>
             <option value="intermediate">Intermediate</option>
