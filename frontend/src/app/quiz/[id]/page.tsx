@@ -11,7 +11,7 @@ export default async function QuizPage({ params }: QuizPageProps) {
   const { id } = await params; // Await the params Promise to get the id
 
   console.log('Fetching quiz server-side:', { id });
-  const response = await fetch(`http://localhost:3000/api/quizzes?id=${id}`, {
+  const response = await fetch(`https://chainiq.vercel.app/api/quizzes?id=${id}`, {
     cache: 'no-store', // Ensure fresh data
   });
 

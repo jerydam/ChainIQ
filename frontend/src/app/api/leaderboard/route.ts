@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Get quiz question count
-    const quizResponse = await fetch(`http://localhost:3000/api/quizzes?id=${quizId}`, {
+    const quizResponse = await fetch(`https://chainiq.vercel.app/api/quizzes?id=${quizId}`, {
       cache: 'no-store',
     });
     if (!quizResponse.ok) {
