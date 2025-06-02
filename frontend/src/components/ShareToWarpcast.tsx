@@ -15,7 +15,7 @@ export function ShareToWarpcast({ quizTitle, quizId, userAddress, username }: Sh
   const handleShare = async () => {
     setIsSharing(true);
     try {
-      const shareText = `I just took the "${quizTitle}" quiz on QuizChain! Try it out: ${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/quiz/${quizId} @${username}`;
+      const shareText = `I just took the "${quizTitle}" quiz on ChainIQ! Try it out: ${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/quiz/${quizId} @${username}`;
       const shareUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(shareText)}&embeds[]=${encodeURIComponent(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/frames/quiz/image?quizId=${quizId}&username=${encodeURIComponent(username)}`)}`;
       window.open(shareUrl, '_blank');
       toast.success('Shared to Warpcast!');

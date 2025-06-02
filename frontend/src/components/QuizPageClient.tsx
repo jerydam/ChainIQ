@@ -1,7 +1,8 @@
-// app/quiz/[id]/page.tsx or similar
+// src/app/quiz/[id]/page.tsx
 'use client';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link'; // Add this import
 import { useWallet } from '@/components/context/WalletContext';
 import QuizPlayer from '@/components/QuizPlayer';
 import { Leaderboard } from '@/components/Leaderboard';
@@ -24,9 +25,9 @@ interface QuizPageClientProps {
 
 export default function QuizPageClient({ quiz }: QuizPageClientProps) {
   const router = useRouter();
-  const { userAddress, isConnected } = useWallet();
+  const { userAddress } = useWallet();
   const [userScores, setUserScores] = useState<UserScore[]>([]);
-  const [refreshKey, setRefreshKey] = useState(0); // Force leaderboard refresh
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const fetchUserScores = useCallback(async () => {
     if (!userAddress) return;
@@ -44,13 +45,14 @@ export default function QuizPageClient({ quiz }: QuizPageClientProps) {
             score: attempt.score,
             totalQuestions: quizData.questions?.length || 0,
             completedAt: attempt.createdAt,
-            timeTaken: attempt.timeTaken || 0, // Default to 0 if missing
+            timeTaken: attempt.timeTaken || 0,
           });
         })
       );
       setUserScores(scores);
-    } catch (err) {
-      console.error('Error fetching user scores:', err);
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('Error fetching user scores:', error);
       toast.error('Failed to load user scores.');
     }
   }, [userAddress]);
@@ -60,8 +62,8 @@ export default function QuizPageClient({ quiz }: QuizPageClientProps) {
   }, [fetchUserScores]);
 
   const handleQuizComplete = () => {
-    fetchUserScores(); // Refresh scores
-    setRefreshKey(prev => prev + 1); // Force leaderboard refresh
+    fetchUserScores();
+    setRefreshKey(prev => prev + 1);
   };
 
   return (
@@ -76,13 +78,17 @@ export default function QuizPageClient({ quiz }: QuizPageClientProps) {
       </div>
       <QuizPlayer
         quiz={quiz}
-        onComplete={handleQuizComplete} // Pass callback to QuizPlayer
+        onComplete={handleQuizComplete}
       />
       <Leaderboard
         quizId={quiz.id}
         className="my-6"
-        key={refreshKey} // Re-mount Leaderboard to force refresh
+        key={refreshKey}
       />
+      {/* Example of fixing <a> tags */}
+      <Link href="/">
+        <span className="text-blue-400 hover:underline">Back to Home</span>
+      </Link>
     </div>
   );
 }

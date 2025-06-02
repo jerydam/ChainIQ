@@ -1,3 +1,4 @@
+// src/app/api/createQuiz/route.ts
 import type { NextRequest } from 'next/server';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
@@ -6,6 +7,8 @@ import { ethers } from 'ethers';
 import { QuizRewardsABI } from '@/abis/QuizAbi';
 import type { Quiz, Question } from '@/types/quiz';
 import { setTimeout } from 'timers/promises';
+import path from 'path';
+import { promises as fs } from 'fs';
 
 export async function POST(req: NextRequest) {
   try {
@@ -105,7 +108,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Validate each question
-    questions.forEach((q, index) => {
+    for (let index = 0; index < questions.length; index++) {
+      const q = questions[index];
       if (
         !q.id ||
         typeof q.question !== 'string' ||
@@ -122,7 +126,7 @@ export async function POST(req: NextRequest) {
         console.log('Returning error response:', response);
         throw new Error(`Invalid question format at index ${index}`);
       }
-    });
+    }
 
     // Upload image to IPFS
     console.log('Uploading image to IPFS');
@@ -167,13 +171,12 @@ export async function POST(req: NextRequest) {
 
     // Call createQuiz on contract with retry logic
     const maxRetries = 5;
-    let lastError: any;
+    let lastError: Error | null = null;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         console.log(`Attempt ${attempt}/${maxRetries}: Connecting to Celo provider`);
         const provider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_CELO_PROVIDER_URL, undefined, {
-          pollingInterval: 1000,
-          timeout: 60000, // 60 seconds
+          pollingInterval: 1000, // Removed unsupported timeout property
         });
         const network = await provider.getNetwork();
         console.log('Connected to network:', { chainId: network.chainId.toString() });
@@ -187,26 +190,27 @@ export async function POST(req: NextRequest) {
         console.log('Gas estimate:', { gasEstimate: gasEstimate.toString() });
         console.log('Sending createQuiz transaction');
         const tx = await contract.createQuiz(quizId, title, nftMetadata, {
-          gasLimit: BigInt(gasEstimate) * BigInt(120) / BigInt(100),
+          gasLimit: (BigInt(gasEstimate) * BigInt(120)) / BigInt(100),
         });
         console.log('Transaction sent:', { txHash: tx.hash });
         await tx.wait();
         console.log('Transaction confirmed');
+        lastError = null;
         break; // Success, exit retry loop
-      } catch (error: any) {
-        lastError = error;
+      } catch (error: unknown) {
+        lastError = error as Error;
         console.error(`Attempt ${attempt}/${maxRetries} failed:`, {
-          message: error.message,
-          code: error.code,
-          stack: error.stack,
+          message: lastError.message,
+          code: (lastError as any).code,
+          stack: lastError.stack,
         });
-        if (attempt < maxRetries && error.code === 'TIMEOUT') {
+        if (attempt < maxRetries && (lastError as any).code === 'TIMEOUT') {
           console.warn(`Retrying after 2s...`);
           await setTimeout(2000);
           continue;
         }
         console.error('Exhausted retries or non-timeout error');
-        throw new Error(`Failed to interact with Celo contract: ${error.message}`);
+        throw new Error(`Failed to interact with Celo contract: ${lastError.message}`);
       }
     }
     if (lastError) {
@@ -216,8 +220,10 @@ export async function POST(req: NextRequest) {
 
     // Save to SQLite
     console.log('Opening SQLite database');
+    const dbPath = process.env.NODE_ENV === 'production' ? '/tmp/quizzes.db' : path.join(process.cwd(), 'quizzes.db');
+    await fs.mkdir(path.dirname(dbPath), { recursive: true }).catch(err => console.error('Failed to create db dir:', err));
     const db = await open({
-      filename: './quizzes.db',
+      filename: dbPath,
       driver: sqlite3.Database,
     });
 
@@ -263,13 +269,14 @@ export async function POST(req: NextRequest) {
         ]
       );
       console.log('Quiz saved to SQLite');
-    } catch (sqliteError: any) {
+    } catch (sqliteError: unknown) {
+      const error = sqliteError as Error;
       console.error('SQLite error:', {
-        message: sqliteError.message,
-        code: sqliteError.code,
-        stack: sqliteError.stack,
+        message: error.message,
+        code: (error as any).code,
+        stack: error.stack,
       });
-      const response = { error: `Failed to save quiz to SQLite: ${sqliteError.message}` };
+      const response = { error: `Failed to save quiz to SQLite: ${error.message}` };
       console.log('Returning error response:', response);
       return new Response(JSON.stringify(response), {
         status: 500,
@@ -286,13 +293,14 @@ export async function POST(req: NextRequest) {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as Error;
     console.error('Error creating quiz:', {
-      message: error.message,
-      code: error.code,
-      stack: error.stack,
+      message: err.message,
+      code: (err as any).code,
+      stack: err.stack,
     });
-    const response = { error: error.message || 'Failed to create quiz' };
+    const response = { error: err.message || 'Failed to create quiz' };
     console.log('Returning error response:', response);
     return new Response(JSON.stringify(response), {
       status: 500,

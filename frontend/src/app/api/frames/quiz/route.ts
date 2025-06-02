@@ -1,8 +1,11 @@
+// src/app/api/frames/quiz/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { open } from 'sqlite';
 import sqlite3 from 'sqlite3';
 import type { Quiz, Question } from '@/types/quiz';
 import { z } from 'zod';
+import path from 'path';
+import { promises as fs } from 'fs';
 
 const FrameStateSchema = z.object({
   quizId: z.string(),
@@ -31,6 +34,8 @@ const QuizSchema = z.object({
       question: z.string(),
       options: z.array(z.string()),
       correctAnswer: z.string(),
+      explanation: z.string(), // Added required property
+      tags: z.array(z.string()), // Added required property
     })
   ),
 });
@@ -51,8 +56,10 @@ export async function POST(req: NextRequest) {
       return new Response('Missing quizId', { status: 400 });
     }
 
+    const dbPath = process.env.NODE_ENV === 'production' ? '/tmp/quizzes.db' : path.join(process.cwd(), 'quizzes.db');
+    await fs.mkdir(path.dirname(dbPath), { recursive: true }).catch(err => console.error('Failed to create db dir:', err));
     const db = await open({
-      filename: './quizzes.db',
+      filename: dbPath,
       driver: sqlite3.Database,
     });
 
@@ -64,6 +71,17 @@ export async function POST(req: NextRequest) {
           state TEXT,
           createdAt TEXT,
           PRIMARY KEY (userId, quizId)
+        )
+      `);
+
+      await db.exec(`
+        CREATE TABLE IF NOT EXISTS quiz_attempts (
+          quizId TEXT,
+          address TEXT,
+          score INTEGER,
+          createdAt TEXT,
+          timeTaken REAL,
+          PRIMARY KEY (quizId, address, createdAt)
         )
       `);
 
@@ -167,9 +185,10 @@ export async function POST(req: NextRequest) {
     } finally {
       await db.close();
     }
-  } catch (error: any) {
-    console.error('Error processing frame:', error);
-    return new Response(JSON.stringify({ error: error.message || 'Failed to process frame' }), { status: 500 });
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error('Error processing frame:', err.message);
+    return new Response(JSON.stringify({ error: err.message || 'Failed to process frame' }), { status: 500 });
   }
 }
 
@@ -206,8 +225,9 @@ export async function GET(req: NextRequest) {
       status: 200,
       headers: { 'Content-Type': 'text/html' },
     });
-  } catch (error: any) {
-    console.error('Error rendering frame:', error);
-    return new Response(JSON.stringify({ error: error.message || 'Failed to render frame' }), { status: 500 });
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error('Error rendering frame:', err.message);
+    return new Response(JSON.stringify({ error: err.message || 'Failed to render frame' }), { status: 500 });
   }
 }

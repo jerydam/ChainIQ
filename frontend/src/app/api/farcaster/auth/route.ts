@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
   try {
     // Mock authentication response (replace with real Farcaster auth)
     const address = '0x1234567890abcdef1234567890abcdef12345678'; // Mock address
-    const message = `Login to QuizChain at ${new Date().toISOString()}`;
+    const message = `Login to ChainIQ at ${new Date().toISOString()}`;
     const signature = '0xMockSignature'; // Replace with actual signature in production
 
     // In a real implementation, use @farcaster/auth-kit or wallet signer

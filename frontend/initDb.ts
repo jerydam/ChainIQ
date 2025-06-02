@@ -4,7 +4,7 @@ import sqlite3 from 'sqlite3';
 
 async function initDb() {
   const db = await open({
-    filename: './quizchain.db',
+    filename: './ChainIQ.db',
     driver: sqlite3.Database,
   });
 

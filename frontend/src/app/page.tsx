@@ -83,7 +83,7 @@ export default function Home() {
       <div className="max-w-5xl mx-auto">
         <header className="text-center mb-12">
           <h1 className="text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
-            🧠 QuizChain
+            🧠 ChainIQ
           </h1>
           <p className="mt-3 text-lg text-gray-300">
             Learn, earn, and mint NFTs on the Celo blockchain

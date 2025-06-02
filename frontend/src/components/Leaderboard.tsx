@@ -1,6 +1,6 @@
-// components/Leaderboard.tsx
+// src/components/Leaderboard.tsx
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 
 interface LeaderboardEntry {
@@ -12,36 +12,32 @@ interface LeaderboardEntry {
 interface LeaderboardProps {
   quizId: string;
   className?: string;
-  onRefresh?: () => void; // Callback for refresh
+  key?: number; // For forced re-mount
 }
 
-export function Leaderboard({ quizId, className, onRefresh }: LeaderboardProps) {
+export function Leaderboard({ quizId, className }: LeaderboardProps) {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchLeaderboard = async () => {
+  const fetchLeaderboard = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/leaderboard?quizId=${quizId}`);
       if (!response.ok) throw new Error(`Failed to fetch leaderboard: ${response.status}`);
       const data = await response.json();
       setLeaderboard(data);
-    } catch (err: any) {
-      console.error('Error fetching leaderboard:', err);
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('Error fetching leaderboard:', error);
       toast.error('Failed to load leaderboard.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [quizId]);
 
   useEffect(() => {
     fetchLeaderboard();
-  }, [quizId]);
-
-  const handleRefresh = () => {
-    fetchLeaderboard();
-    if (onRefresh) onRefresh();
-  };
+  }, [fetchLeaderboard]);
 
   if (loading) {
     return <div className={`text-center text-gray-300 ${className}`}>Loading leaderboard...</div>;
@@ -49,15 +45,7 @@ export function Leaderboard({ quizId, className, onRefresh }: LeaderboardProps) 
 
   return (
     <div className={`bg-white/10 rounded-xl p-6 ${className}`}>
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-xl font-bold text-white">🏆 Leaderboard</h3>
-        <button
-          className="text-blue-400 hover:text-blue-300 text-sm"
-          onClick={handleRefresh}
-        >
-          Refresh
-        </button>
-      </div>
+      <h3 className="text-xl font-bold text-white mb-4">🏆 Leaderboard</h3>
       {leaderboard.length === 0 ? (
         <p className="text-center text-gray-400">No attempts yet. Be the first!</p>
       ) : (

@@ -29,37 +29,39 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false, onComple
   const [startTime, setStartTime] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    if (isFrame) return;
+useEffect(() => {
+  if (isFrame) return;
 
-    const initialize = async () => {
-      if (!userAddress) return;
-      try {
-        const response = await fetch(`/api/quizAttempts?quizId=${quiz.id}&address=${userAddress}`);
-        if (response.ok) {
-          const { attempt, allAttempts } = await response.json();
-          if (attempt && attempt.score === quiz.questions.length) {
-            setHasPerfectScore(true);
-            setScore(attempt.score);
-            setIsQuizComplete(true);
-          } else if (attempt) {
-            setScore(attempt.score);
-          }
-          setAttemptCount(allAttempts ? allAttempts.length : 0);
-        } else {
-          console.error('Failed to fetch attempts:', response.status, await response.text());
-          toast.error('Failed to load quiz data.');
+  const initialize = async () => {
+    if (!userAddress) return;
+    try {
+      const response = await fetch(`/api/quizAttempts?quizId=${quiz.id}&address=${userAddress}`);
+      if (response.ok) {
+        const { attempt, allAttempts } = await response.json();
+        if (attempt && attempt.score === quiz.questions.length) {
+          setHasPerfectScore(true);
+          setScore(attempt.score);
+          setIsQuizComplete(true);
+        } else if (attempt) {
+          setScore(attempt.score);
         }
-      } catch (err: any) {
-        console.error('Initialization error:', err);
+        setAttemptCount(allAttempts ? allAttempts.length : 0);
+      } else {
+        console.error('Failed to fetch attempts:', response.status, await response.text());
         toast.error('Failed to load quiz data.');
       }
-    };
-    initialize();
-    setStartTime(Date.now());
-  }, [quiz.id, userAddress, isFrame]);
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('Initialization error:', error);
+      toast.error('Failed to load quiz data.');
+    }
+  };
+  initialize();
+  setStartTime(Date.now());
+}, [quiz.id, quiz.questions.length, userAddress, isFrame]); // Added quiz.questions.length
 
-  useEffect(() => {
+ 
+useEffect(() => {
     if (isFrame || isQuizComplete || hasPerfectScore) return;
 
     const interval = setInterval(() => {
@@ -74,7 +76,7 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false, onComple
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [currentQuestionIndex, isQuizComplete, hasPerfectScore, isFrame]);
+  }, [currentQuestionIndex, isQuizComplete, hasPerfectScore, isFrame, ]);
 
   const handleAnswerSelect = (answer: string) => {
     setSelectedAnswer(answer);
@@ -243,7 +245,7 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false, onComple
   if (hasPerfectScore && !isFrame) {
     return (
       <div className="p-4 bg-gray-800/50 rounded-xl">
-        <h2 className="text-2xl font-bold text-blue-300">You've Mastered the Quiz!</h2>
+        <h2 className="text-2xl font-bold text-blue-300">You&apos;ve Mastered the Quiz!</h2>
         <p className="text-gray-300">
           Perfect score: {score}/{quiz.questions.length}. NFT minted!
         </p>
