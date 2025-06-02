@@ -1,20 +1,22 @@
-"use client";
-
+// app/quiz/[id]/page.tsx or similar
+'use client';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
-import { ethers } from 'ethers'; // Import ethers
+import { useState, useEffect, useCallback } from 'react';
+import { useWallet } from '@/components/context/WalletContext';
 import QuizPlayer from '@/components/QuizPlayer';
 import { Leaderboard } from '@/components/Leaderboard';
-import { RewardsPanel } from '@/components/RewardsPanel';
 import type { Quiz, UserScore } from '@/types/quiz';
+import toast from 'react-hot-toast';
+import { z } from 'zod';
 
-// Extend Window interface to include ethereum
-interface Window {
-  ethereum?: {
-    request: (args: { method: string; params?: any[] }) => Promise<any>;
-    on: (event: string, callback: (accounts: string[]) => void) => void;
-  };
-}
+const UserScoreSchema = z.object({
+  quizId: z.string(),
+  quizTitle: z.string(),
+  score: z.number(),
+  totalQuestions: z.number(),
+  completedAt: z.string().transform((str) => new Date(str)),
+  timeTaken: z.number().optional(),
+}).strict();
 
 interface QuizPageClientProps {
   quiz: Quiz;
@@ -22,57 +24,45 @@ interface QuizPageClientProps {
 
 export default function QuizPageClient({ quiz }: QuizPageClientProps) {
   const router = useRouter();
+  const { userAddress, isConnected } = useWallet();
   const [userScores, setUserScores] = useState<UserScore[]>([]);
-  const [userAddress, setUserAddress] = useState<string | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0); // Force leaderboard refresh
+
+  const fetchUserScores = useCallback(async () => {
+    if (!userAddress) return;
+    try {
+      const response = await fetch(`/api/quizAttempts?address=${userAddress}`);
+      if (!response.ok) throw new Error('Failed to fetch scores');
+      const { allAttempts } = await response.json();
+      const scores = await Promise.all(
+        allAttempts.map(async (attempt: any) => {
+          const quizResponse = await fetch(`/api/quizzes?id=${attempt.quizId}`);
+          const quizData = quizResponse.ok ? await quizResponse.json() : { title: 'Unknown Quiz', questions: [] };
+          return UserScoreSchema.parse({
+            quizId: attempt.quizId,
+            quizTitle: quizData.title || 'Unknown Quiz',
+            score: attempt.score,
+            totalQuestions: quizData.questions?.length || 0,
+            completedAt: attempt.createdAt,
+            timeTaken: attempt.timeTaken || 0, // Default to 0 if missing
+          });
+        })
+      );
+      setUserScores(scores);
+    } catch (err) {
+      console.error('Error fetching user scores:', err);
+      toast.error('Failed to load user scores.');
+    }
+  }, [userAddress]);
 
   useEffect(() => {
-    const fetchUserData = async () => {
-      if (typeof window === 'undefined' || !window.ethereum) {
-        console.error('MetaMask not detected');
-        return;
-      }
+    fetchUserScores();
+  }, [fetchUserScores]);
 
-      try {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const accounts = await provider.send('eth_requestAccounts', []);
-        if (accounts.length === 0) {
-          console.error('No wallet accounts found');
-          return;
-        }
-        setUserAddress(accounts[0]);
-        setIsConnected(true);
-        console.log('Wallet connected:', accounts[0]);
-
-        // Fetch user scores
-        const response = await fetch(`/api/quizAttempts?address=${accounts[0]}`);
-        if (response.ok) {
-          const { allAttempts } = await response.json();
-          const scores: UserScore[] = await Promise.all(
-            allAttempts.map(async (attempt: any) => {
-              // Fetch quiz details to get title and total questions
-              const quizResponse = await fetch(`/api/quizzes?id=${attempt.quizId}`);
-              const quizData = quizResponse.ok ? await quizResponse.json() : {};
-              return {
-                quizId: attempt.quizId,
-                score: attempt.score,
-                totalQuestions: quizData.questions?.length || 0,
-                quizTitle: quizData.title || 'Unknown Quiz',
-                completedAt: new Date(attempt.createdAt),
-              };
-            })
-          );
-          setUserScores(scores);
-          console.log('User scores:', scores);
-        } else {
-          console.error('Failed to fetch scores:', response.status);
-        }
-      } catch (err) {
-        console.error('Error fetching user data:', err);
-      }
-    };
-    fetchUserData();
-  }, [quiz.id]);
+  const handleQuizComplete = () => {
+    fetchUserScores(); // Refresh scores
+    setRefreshKey(prev => prev + 1); // Force leaderboard refresh
+  };
 
   return (
     <div className="p-4">
@@ -84,8 +74,15 @@ export default function QuizPageClient({ quiz }: QuizPageClientProps) {
           ← Back
         </button>
       </div>
-      <QuizPlayer quiz={quiz} />
-      <Leaderboard quizId={quiz.id} className="my-6" />
-     </div>
+      <QuizPlayer
+        quiz={quiz}
+        onComplete={handleQuizComplete} // Pass callback to QuizPlayer
+      />
+      <Leaderboard
+        quizId={quiz.id}
+        className="my-6"
+        key={refreshKey} // Re-mount Leaderboard to force refresh
+      />
+    </div>
   );
 }

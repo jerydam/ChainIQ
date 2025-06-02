@@ -1,72 +1,63 @@
-"use client";
+// components/QuizPlayer.tsx
+'use client';
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { useRouter } from 'next/navigation';
 import { Quiz, Question } from '@/types/quiz';
 import { QuizRewardsABI } from '@/abis/QuizAbi';
+import toast from 'react-hot-toast';
+import { useWallet } from '@/components/context/WalletContext';
 
 const setTimeout = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
 
 interface QuizPlayerProps {
   quiz: Quiz;
   isFrame?: boolean;
+  onComplete?: () => void; // New prop for callback
 }
 
-const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false }) => {
+const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false, onComplete }) => {
   const router = useRouter();
+  const { userAddress, isConnected } = useWallet();
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [score, setScore] = useState(0);
   const [isQuizComplete, setIsQuizComplete] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [hasPerfectScore, setHasPerfectScore] = useState(false);
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [timer, setTimer] = useState(10);
   const [attemptCount, setAttemptCount] = useState(0);
-  const [startTime, setStartTime] = useState<number | null>(null); // Track quiz start time
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (isFrame) return;
 
     const initialize = async () => {
+      if (!userAddress) return;
       try {
-        if (typeof window.ethereum === 'undefined') {
-          throw new Error('Please install MetaMask or another wallet');
-        }
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const accounts = await provider.send('eth_requestAccounts', []);
-        if (accounts.length === 0) {
-          throw new Error('No wallet accounts found');
-        }
-        setWalletAddress(accounts[0]);
-        console.log('Wallet connected:', accounts[0]);
-
-        const response = await fetch(`/api/quizAttempts?quizId=${quiz.id}&address=${accounts[0]}`);
+        const response = await fetch(`/api/quizAttempts?quizId=${quiz.id}&address=${userAddress}`);
         if (response.ok) {
           const { attempt, allAttempts } = await response.json();
           if (attempt && attempt.score === quiz.questions.length) {
             setHasPerfectScore(true);
             setScore(attempt.score);
             setIsQuizComplete(true);
-            console.log('Perfect score found:', attempt.score);
           } else if (attempt) {
             setScore(attempt.score);
-            console.log('Prior attempt found:', attempt.score);
           }
           setAttemptCount(allAttempts ? allAttempts.length : 0);
         } else {
-          console.error('Failed to check attempts:', response.status);
-          setError('Failed to check prior attempts');
+          console.error('Failed to fetch attempts:', response.status, await response.text());
+          toast.error('Failed to load quiz data.');
         }
       } catch (err: any) {
-        console.error('Initialization error:', err.message);
-        setError('Failed to connect wallet: ' + err.message);
+        console.error('Initialization error:', err);
+        toast.error('Failed to load quiz data.');
       }
     };
     initialize();
-    setStartTime(Date.now()); // Start timing when quiz loads
-  }, [quiz.id, isFrame]);
+    setStartTime(Date.now());
+  }, [quiz.id, userAddress, isFrame]);
 
   useEffect(() => {
     if (isFrame || isQuizComplete || hasPerfectScore) return;
@@ -87,149 +78,175 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false }) => {
 
   const handleAnswerSelect = (answer: string) => {
     setSelectedAnswer(answer);
-    console.log('Answer selected:', answer);
   };
 
   const handleNextQuestion = async (isTimeout = false) => {
     if (!isTimeout && selectedAnswer === null) {
-      setError('Please select an answer');
-      console.log('No answer selected');
+      toast.error('Please select an answer.');
       return;
     }
 
     const currentQuestion = quiz.questions[currentQuestionIndex];
     if (!isTimeout && selectedAnswer === currentQuestion.correctAnswer) {
-      setScore(score + 1);
-      console.log('Correct answer, score:', score + 1);
-    } else if (isTimeout) {
-      console.log('Timeout, no points');
+      setScore(prev => prev + 1);
     }
 
     setSelectedAnswer(null);
-    setError(null);
     setTimer(10);
 
     if (currentQuestionIndex < quiz.questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
-      console.log('Next question:', currentQuestionIndex + 1);
+      setCurrentQuestionIndex(prev => prev + 1);
     } else {
       setIsQuizComplete(true);
-      console.log('Quiz completed');
       await submitQuiz();
+      if (onComplete) onComplete(); // Trigger callback on completion
     }
   };
 
   const submitQuiz = async () => {
-    if (isFrame) return;
-  
-    if (!walletAddress) {
-      setError('Wallet not connected');
-      console.log('Wallet not connected');
+    if (isFrame || !userAddress) {
+      toast.error('Please connect your wallet.');
       return;
     }
-  
+
     setIsLoading(true);
     try {
       const endTime = Date.now();
       const timeTaken = startTime ? (endTime - startTime) / 1000 : 0;
-      console.log('Submitting attempt:', { quizId: quiz.id, score, address: walletAddress, timeTaken });
-  
-      const attemptResponse = await fetch('/api/quizAttempts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          quizId: quiz.id,
-          address: walletAddress,
-          score,
-          timeTaken,
-        }),
-      });
-  
-      if (!attemptResponse.ok) {
-        const errorText = await attemptResponse.text();
-        console.error('Failed to save attempt:', attemptResponse.status, errorText);
-        throw new Error('Failed to save quiz attempt');
+
+      // Save quiz attempt (non-critical)
+      try {
+        console.log('Submitting quiz attempt:', { quizId: quiz.id, address: userAddress, score, timeTaken });
+        const attemptResponse = await fetch('/api/quizAttempts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            quizId: quiz.id,
+            address: userAddress,
+            score,
+            timeTaken,
+          }),
+        });
+        const responseText = await attemptResponse.text();
+        console.log('API response:', attemptResponse.status, responseText);
+        if (attemptResponse.ok) {
+          setAttemptCount(prev => prev + 1);
+        } else {
+          console.warn('Failed to save quiz attempt:', responseText);
+          toast.error('Failed to save quiz attempt, but proceeding with blockchain.');
+        }
+      } catch (apiErr: any) {
+        console.warn('API error:', apiErr.message);
+        toast.error('Failed to save quiz attempt, but proceeding with blockchain.');
       }
-      console.log('Attempt saved');
-      setAttemptCount(attemptCount + 1);
-  
+
+      // Record completion and claim NFT for perfect score
       if (score === quiz.questions.length) {
         setHasPerfectScore(true);
+        if (!isConnected || !window.ethereum) {
+          throw new Error('Wallet not connected or MetaMask not detected');
+        }
+
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const signer = await provider.getSigner();
+        const network = await provider.getNetwork();
+        if (network.chainId.toString() !== '44787') {
+          try {
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: `0x${(44787).toString(16)}` }],
+            });
+          } catch (switchError: any) {
+            throw new Error('Please switch to Celo Alfajores network');
+          }
+        }
+
+        const contract = new ethers.Contract(
+          process.env.NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS!,
+          QuizRewardsABI,
+          signer
+        );
         const maxRetries = 5;
+
+        // Record quiz completion
         let lastError: any;
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           try {
-            console.log(`Attempt ${attempt}/${maxRetries}: Connecting to Celo`);
-            const provider = new ethers.BrowserProvider(window.ethereum);
-            const signer = await provider.getSigner();
-            const network = await provider.getNetwork();
-            if (network.chainId.toString() !== '44787') {
-              throw new Error('Wrong network; expected Celo Alfajores (44787)');
-            }
-  
-            const contract = new ethers.Contract(
-              process.env.NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS!,
-              QuizRewardsABI,
-              signer
-            );
-  
             const gasEstimate = await contract.recordQuizCompletion.estimateGas(quiz.id);
             const tx = await contract.recordQuizCompletion(quiz.id, {
-              gasLimit: BigInt(gasEstimate) * BigInt(120) / BigInt(100),
+              gasLimit: (gasEstimate * BigInt(120)) / BigInt(100),
             });
-            console.log('recordQuizCompletion sent:', tx.hash);
             await tx.wait();
-            console.log('recordQuizCompletion confirmed');
-  
+            console.log('Quiz completion recorded:', tx.hash);
+            toast.success('Quiz completion recorded on blockchain!');
+            lastError = null;
             break;
           } catch (err: any) {
             lastError = err;
-            console.error(`Attempt ${attempt}/${maxRetries} failed:`, err.message);
+            console.error(`Record attempt ${attempt}/${maxRetries} failed:`, err);
             if (attempt < maxRetries && err.code === 'TIMEOUT') {
-              console.warn('Retrying after 2s...');
               await setTimeout(2000);
               continue;
             }
-            throw new Error(`Celo contract error: ${err.message}`);
           }
         }
-        if (lastError) {
-          throw lastError;
+        if (lastError) throw new Error(`Failed to record quiz completion: ${lastError.message}`);
+
+        // Claim NFT
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            const gasEstimate = await contract.claimNFTReward.estimateGas(quiz.id);
+            const tx = await contract.claimNFTReward(quiz.id, {
+              gasLimit: (gasEstimate * BigInt(120)) / BigInt(100),
+            });
+            await tx.wait();
+            console.log('NFT claimed:', tx.hash);
+            toast.success('NFT reward claimed successfully! 🎉');
+            lastError = null;
+            break;
+          } catch (err: any) {
+            lastError = err;
+            console.error(`Claim attempt ${attempt}/${maxRetries} failed:`, err);
+            if (attempt < maxRetries && err.code === 'TIMEOUT') {
+              await setTimeout(2000);
+              continue;
+            }
+          }
         }
+        if (lastError) throw new Error(`Failed to claim NFT: ${lastError.message}`);
       }
     } catch (err: any) {
-      console.error('Error submitting quiz:', err.message);
-      setError('Failed to submit quiz: ' + err.message);
+      console.error('Error submitting quiz:', err);
+      toast.error(
+        err.message.includes('INSUFFICIENT_FUNDS')
+          ? 'Insufficient funds for gas. Get testnet CELO at https://faucet.celo.org.'
+          : err.message
+      );
     } finally {
       setIsLoading(false);
-      console.log('Submission complete');
     }
   };
 
   const handleRetry = () => {
     if (hasPerfectScore) {
-      setError('You have already achieved a perfect score and cannot retake this quiz.');
+      toast.error('You have a perfect score and cannot retake this quiz.');
       return;
     }
     setCurrentQuestionIndex(0);
     setScore(0);
     setSelectedAnswer(null);
     setIsQuizComplete(false);
-    setError(null);
     setTimer(10);
-    setStartTime(Date.now()); // Reset start time for new attempt
-    console.log('Retrying quiz');
+    setStartTime(Date.now());
   };
 
   if (hasPerfectScore && !isFrame) {
-    console.log('Perfect score:', score);
     return (
       <div className="p-4 bg-gray-800/50 rounded-xl">
         <h2 className="text-2xl font-bold text-blue-300">You've Mastered the Quiz!</h2>
         <p className="text-gray-300">
-          Perfect score: {score}/{quiz.questions.length}. NFT minted! No more attempts allowed.
+          Perfect score: {score}/{quiz.questions.length}. NFT minted!
         </p>
-        {error && <p className="text-red-500 mt-2">{error}</p>}
         <button
           className="mt-4 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
           onClick={() => router.push('/')}
@@ -241,7 +258,6 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false }) => {
   }
 
   if (isQuizComplete && !isFrame) {
-    console.log('Quiz complete:', score);
     return (
       <div className="p-4 bg-gray-800/50 rounded-xl">
         <h2 className="text-2xl font-bold text-blue-300">Quiz Complete!</h2>
@@ -249,7 +265,6 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false }) => {
           Your score: {score}/{quiz.questions.length}
           {score === quiz.questions.length ? ' - Perfect score! NFT minted!' : ''}
         </p>
-        {error && <p className="text-red-500 mt-2">{error}</p>}
         <button
           className="mt-4 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
           onClick={() => router.push('/')}
@@ -275,7 +290,6 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false }) => {
   }
 
   const currentQuestion: Question = quiz.questions[currentQuestionIndex];
-  console.log('Rendering question:', currentQuestionIndex + 1, currentQuestion.question);
 
   return (
     <div className="p-4 bg-gray-800/50 rounded-xl">
@@ -301,7 +315,6 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false }) => {
           </button>
         ))}
       </div>
-      {error && <p className="text-red-500 mt-2">{error}</p>}
       <button
         className="mt-4 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
         onClick={() => handleNextQuestion()}

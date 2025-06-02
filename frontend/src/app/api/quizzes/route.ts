@@ -1,68 +1,93 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { open } from 'sqlite';
+import type { NextRequest } from 'next/server';
+import { Database } from 'sqlite3';
 import sqlite3 from 'sqlite3';
+import { open } from 'sqlite';
+import type { Quiz } from '@/types/quiz';
 
 export async function GET(req: NextRequest) {
   try {
-    const id = req.nextUrl.searchParams.get('id');
     const db = await open({
       filename: './quizzes.db',
       driver: sqlite3.Database,
     });
 
-    if (id) {
-      const quiz = await db.get('SELECT * FROM quizzes WHERE id = ?', [id]);
-      if (!quiz) {
-        await db.close();
-        return NextResponse.json({ error: 'Quiz not found' }, { status: 404 });
-      }
-      quiz.questions = JSON.parse(quiz.questions || '[]');
-      await db.close();
-      return NextResponse.json(quiz, { status: 200 });
-    }
+    console.log('Connected to SQLite database');
 
-    const quizzes = await db.all('SELECT * FROM quizzes');
-    quizzes.forEach(quiz => {
-      quiz.questions = JSON.parse(quiz.questions || '[]');
-    });
-    await db.close();
-    return NextResponse.json(quizzes, { status: 200 });
-  } catch (error: any) {
-    console.error('Error fetching quizzes:', error);
-    return NextResponse.json({ error: 'Failed to fetch quizzes' }, { status: 500 });
-  }
-}
-
-export async function POST(req: NextRequest) {
-  try {
-    const quiz = await req.json();
-    if (!quiz.id || !quiz.title || !quiz.questions) {
-      return NextResponse.json({ error: 'Invalid quiz data' }, { status: 400 });
-    }
-
-    const db = await open({
-      filename: './quizzes.db',
-      driver: sqlite3.Database,
-    });
-
+    // Create quizzes table if it doesn't exist
     await db.exec(`
       CREATE TABLE IF NOT EXISTS quizzes (
         id TEXT PRIMARY KEY,
         title TEXT,
         description TEXT,
-        questions TEXT
+        questions TEXT,
+        difficulty TEXT,
+        estimatedTime INTEGER,
+        rewards TEXT,
+        source TEXT,
+        createdAt TEXT,
+        rewardType TEXT,
+        rewardAmount INTEGER,
+        nftMetadata TEXT
       )
     `);
+    console.log('Ensured quizzes table exists');
 
-    await db.run(
-      'INSERT INTO quizzes (id, title, description, questions) VALUES (?, ?, ?, ?)',
-      [quiz.id, quiz.title, quiz.description || '', JSON.stringify(quiz.questions)]
-    );
+    const id = req.nextUrl.searchParams.get('id');
+    if (id) {
+      console.log('Fetching quiz with ID:', id);
+      const quiz = await db.get('SELECT * FROM quizzes WHERE id = ?', [id]);
+      await db.close();
+      if (!quiz) {
+        console.error('Quiz not found:', { id });
+        const response = { error: 'Quiz not found' };
+        console.log('Returning error response:', response);
+        return new Response(JSON.stringify(response), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      const response = {
+        ...quiz,
+        questions: JSON.parse(quiz.questions),
+        rewards: JSON.parse(quiz.rewards),
+        source: JSON.parse(quiz.source),
+        createdAt: new Date(quiz.createdAt),
+      };
+      console.log('Returning quiz:', { id });
+      return new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
+    console.log('Fetching all quizzes');
+    const quizzes = await db.all('SELECT * FROM quizzes');
     await db.close();
-    return NextResponse.json({ success: true }, { status: 200 });
-  } catch (error: any) {
-    console.error('Error saving quiz:', error);
-    return NextResponse.json({ error: 'Failed to save quiz' }, { status: 500 });
-  }
+    console.log('Quizzes retrieved:', { length: quizzes.length });
+
+    const response = quizzes.map((quiz) => ({
+      ...quiz,
+      questions: JSON.parse(quiz.questions),
+      rewards: JSON.parse(quiz.rewards),
+      source: JSON.parse(quiz.source),
+      createdAt: new Date(quiz.createdAt),
+    }));
+    console.log('Returning all quizzes:', { count: response.length });
+    return new Response(JSON.stringify(response), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error: any) {
+      console.error('Error fetching quizzes:', {
+        message: error.message,
+        code: error.code || 'UNKNOWN',
+        stack: error.stack,
+      });
+      const response = { error: error.message || 'Failed to fetch quizzes' };
+      console.log('Returning error response:', response);
+      return new Response(JSON.stringify(response), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 }

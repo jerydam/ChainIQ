@@ -1,4 +1,5 @@
-"use client";
+// components/RewardsPanel.tsx
+'use client';
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import type { UserScore } from '@/types/quiz';
@@ -6,91 +7,154 @@ import { QuizRewardsABI } from '@/abis/QuizAbi';
 
 interface RewardsPanelProps {
   userScores: UserScore[];
-  userAddress: string;
+  userAddress: string | null;
   isConnected: boolean;
 }
 
 export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPanelProps) {
   const [claimingRewards, setClaimingRewards] = useState<string[]>([]);
   const [claimedNFTs, setClaimedNFTs] = useState<{ [quizId: string]: boolean }>({});
+  const [error, setError] = useState<string | null>(null);
   const contractAddress = process.env.NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS || '';
+  const CELO_ALFAJORES_CHAIN_ID = 44787;
 
   useEffect(() => {
     const checkClaimedNFTs = async () => {
-      if (!isConnected || !userAddress) return;
+      if (!isConnected || !userAddress || !contractAddress) {
+        setError('Wallet not connected or contract address missing');
+        return;
+      }
+      if (typeof window === 'undefined' || !window.ethereum) {
+        setError('No wallet provider detected');
+        return;
+      }
+
       try {
         const provider = new ethers.BrowserProvider(window.ethereum);
+        const network = await provider.getNetwork();
+        if (Number(network.chainId) !== CELO_ALFAJORES_CHAIN_ID) {
+          setError('Please switch to Celo Alfajores network');
+          return;
+        }
+
         const contract = new ethers.Contract(contractAddress, QuizRewardsABI, provider);
+        // Debug: Verify contract method exists
+        if (!contract.hasCompletedQuiz) {
+          setError('Contract does not support hasCompletedQuiz function');
+          return;
+        }
+
         const claimed: { [quizId: string]: boolean } = {};
         for (const score of userScores) {
-          const quizId = score.quizId.split('-')[0];
-          const hasClaimed = await contract.hasClaimedNFT(userAddress, quizId);
-          claimed[quizId] = hasClaimed;
+          const quizId = score.quizId;
+          if (!quizId) {
+            console.warn(`Invalid quizId for score:`, score);
+            continue;
+          }
+          // Check if quiz exists
+          const quizData = await contract.quizzes(quizId);
+          if (!quizData.exists) {
+            console.warn(`Quiz does not exist: ${quizId}`);
+            continue;
+          }
+          const hasCompleted = await contract.hasCompletedQuiz(userAddress, quizId);
+          claimed[quizId] = hasCompleted; // Assume completion may indicate claimed
         }
         setClaimedNFTs(claimed);
-      } catch (error) {
-        console.error('Error checking claimed NFTs:', error);
+        setError(null);
+      } catch (err: any) {
+        console.error('Error checking quiz completions:', err);
+        setError(err.message || 'Failed to check quiz completions');
       }
     };
     checkClaimedNFTs();
-  }, [userScores, userAddress, isConnected]);
+  }, [userScores, userAddress, isConnected, contractAddress]);
 
-  // Only perfect scores that haven't been claimed are eligible
   const eligibleScores = userScores.filter(
-    score => score.score === score.totalQuestions && !claimedNFTs[score.quizId.split('-')[0]]
+    score => score.score === score.totalQuestions && !claimedNFTs[score.quizId]
   );
 
   const totalRewardsEarned = userScores.filter(score => score.score === score.totalQuestions).length;
   const totalPointsEarned = userScores.reduce((acc, score) => acc + score.score, 0);
 
   const handleClaimReward = async (scoreId: string) => {
-    if (!isConnected) {
+    if (!isConnected || !userAddress) {
       alert('Please connect your wallet to claim rewards.');
       return;
     }
+    if (!contractAddress) {
+      alert('Contract address is not configured.');
+      return;
+    }
+    if (typeof window === 'undefined' || !window.ethereum) {
+      alert('No wallet provider detected');
+      return;
+    }
 
-    setClaimingRewards([...claimingRewards, scoreId]);
+    setClaimingRewards(prev => [...prev, scoreId]);
+    setError(null);
 
     try {
-      if (typeof window === 'undefined' || !window.ethereum) {
-        throw new Error('No wallet detected');
-      }
       const provider = new ethers.BrowserProvider(window.ethereum);
+      const network = await provider.getNetwork();
+      if (Number(network.chainId) !== CELO_ALFAJORES_CHAIN_ID) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: `0x${CELO_ALFAJORES_CHAIN_ID.toString(16)}` }],
+          });
+        } catch (switchError: any) {
+          throw new Error('Please switch to Celo Alfajores network');
+        }
+      }
+
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(contractAddress, QuizRewardsABI, signer);
+      if (!contract.claimNFTReward) {
+        throw new Error('Contract does not support claimNFTReward function');
+      }
 
-      const quizId = scoreId.split('-')[0];
-      const gasEstimate = await contract.claimNFTReward.estimateGas(quizId);
+      const quizId = scoreId;
+      let gasEstimate: bigint;
+      try {
+        gasEstimate = await contract.claimNFTReward.estimateGas(quizId);
+      } catch (err) {
+        throw new Error('Gas estimation failed. Ensure you meet claim requirements.');
+      }
+
       const tx = await contract.claimNFTReward(quizId, {
-        gasLimit: BigInt(gasEstimate) * BigInt(120) / BigInt(100),
+        gasLimit: (gasEstimate * BigInt(120)) / BigInt(100),
       });
       console.log('Transaction sent:', tx.hash);
       await tx.wait();
       console.log('Transaction confirmed');
       alert('NFT reward claimed successfully! 🎉');
 
-      // Update claimed status
       setClaimedNFTs(prev => ({ ...prev, [quizId]: true }));
-    } catch (error: any) {
-      console.error('Error claiming NFT reward:', error);
+    } catch (err: any) {
+      console.error('Error claiming NFT reward:', err);
       let errorMessage = 'Failed to claim NFT reward';
-      if (error.code === 'INSUFFICIENT_FUNDS') {
+      if (err.code === 'INSUFFICIENT_FUNDS') {
         errorMessage = 'Insufficient funds for gas fees';
-      } else if (error.reason) {
-        errorMessage = error.reason;
-      } else if (error.message) {
-        errorMessage = error.message;
+      } else if (err.reason) {
+        errorMessage = err.reason;
+      } else if (err.message) {
+        errorMessage = err.message;
       }
-      alert(errorMessage);
+      setError(errorMessage);
+    } finally {
+      setClaimingRewards(prev => prev.filter(id => id !== scoreId));
     }
-
-    setClaimingRewards(claimingRewards.filter(id => id !== scoreId));
   };
 
   return (
     <div>
       <h2 className="text-3xl font-bold text-white mb-6">🏆 Your Rewards</h2>
-      
+      {error && (
+        <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 mb-6 text-red-400">
+          {error}
+        </div>
+      )}
       {!isConnected ? (
         <div className="text-center py-12">
           <div className="text-6xl mb-4">🔗</div>
@@ -111,44 +175,42 @@ export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPa
               <div className="text-white font-semibold">NFTs Earned</div>
               <div className="text-sm text-gray-400">For perfect scores</div>
             </div>
-            
             <div className="bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/30 rounded-xl p-6 text-center">
               <div className="text-3xl font-bold text-green-400 mb-2">{totalPointsEarned}</div>
               <div className="text-white font-semibold">Total Points</div>
               <div className="text-sm text-gray-400">Across all quizzes</div>
             </div>
-            
             <div className="bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl p-6 text-center">
               <div className="text-3xl font-bold text-purple-400 mb-2">{userScores.length}</div>
               <div className="text-white font-semibold">Quizzes Completed</div>
               <div className="text-sm text-gray-400">Keep learning!</div>
             </div>
           </div>
-
           {eligibleScores.length > 0 && (
             <div className="bg-white/10 rounded-xl p-6 mb-6">
               <h3 className="text-xl font-bold text-white mb-4">🎁 Claimable NFTs</h3>
               <div className="space-y-3">
                 {eligibleScores.map((score) => (
                   <div
-                    key={`${score.quizId}-${score.completedAt.getTime()}`}
+                    key={score.quizId}
                     className="bg-white/10 rounded-lg p-4 flex justify-between items-center"
                   >
                     <div>
                       <h4 className="font-bold text-white">{score.quizTitle}</h4>
                       <p className="text-sm text-gray-400">
-                        Score: {score.score}/{score.totalQuestions} ({Math.round((score.score / score.totalQuestions) * 100)}%)
+                        Score: {score.score}/{score.totalQuestions} (
+                        {Math.round((score.score / score.totalQuestions) * 100)}%)
                       </p>
                       <p className="text-xs text-gray-500">
                         Completed: {score.completedAt.toLocaleDateString()}
                       </p>
                     </div>
                     <button
-                      onClick={() => handleClaimReward(`${score.quizId}-${score.completedAt.getTime()}`)}
-                      disabled={claimingRewards.includes(`${score.quizId}-${score.completedAt.getTime()}`)}
+                      onClick={() => handleClaimReward(score.quizId)}
+                      disabled={claimingRewards.includes(score.quizId)}
                       className="px-4 py-2 bg-gradient-to-r from-yellow-400 to-orange-400 hover:from-yellow-500 hover:to-orange-500 text-black disabled:from-gray-600 disabled:text-gray-500 font-semibold rounded-full transition-all"
                     >
-                      {claimingRewards.includes(`${score.quizId}-${score.completedAt.getTime()}`) ? (
+                      {claimingRewards.includes(score.quizId) ? (
                         <div className="flex items-center space-x-2">
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-200"></div>
                           <span>Claiming...</span>
@@ -162,15 +224,11 @@ export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPa
               </div>
             </div>
           )}
-
           <div className="bg-white/10 rounded-xl p-6">
             <h3 className="text-xl font-bold text-white mb-4">📊 Quiz History</h3>
             <div className="space-y-3">
               {userScores.map((score) => (
-                <div
-                  key={`${score.quizId}-${score.completedAt.getTime()}`}
-                  className="bg-white/10 rounded-lg p-4"
-                >
+                <div key={score.quizId} className="bg-white/10 rounded-lg p-4">
                   <div className="flex justify-between items-start mb-2">
                     <h4 className="font-bold text-white">{score.quizTitle}</h4>
                     <span className="font-bold text-white">
@@ -191,7 +249,6 @@ export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPa
           </div>
         </>
       )}
-      
       <div className="mt-6 bg-blue-500/20 border border-blue-500/50 rounded-xl p-4">
         <h3 className="text-lg font-bold text-white mb-3">ℹ️ Reward System</h3>
         <p className="text-sm text-gray-300">

@@ -1,5 +1,7 @@
-"use client";
+// components/Leaderboard.tsx
+'use client';
 import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 
 interface LeaderboardEntry {
   address: string;
@@ -9,43 +11,53 @@ interface LeaderboardEntry {
 
 interface LeaderboardProps {
   quizId: string;
+  className?: string;
+  onRefresh?: () => void; // Callback for refresh
 }
 
-export function Leaderboard({ quizId }: LeaderboardProps) {
+export function Leaderboard({ quizId, className, onRefresh }: LeaderboardProps) {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+
+  const fetchLeaderboard = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/leaderboard?quizId=${quizId}`);
+      if (!response.ok) throw new Error(`Failed to fetch leaderboard: ${response.status}`);
+      const data = await response.json();
+      setLeaderboard(data);
+    } catch (err: any) {
+      console.error('Error fetching leaderboard:', err);
+      toast.error('Failed to load leaderboard.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchLeaderboard = async () => {
-      try {
-        const response = await fetch(`/api/leaderboard?quizId=${quizId}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch leaderboard');
-        }
-        const data = await response.json();
-        setLeaderboard(data);
-      } catch (err: any) {
-        console.error('Error fetching leaderboard:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchLeaderboard();
   }, [quizId]);
 
-  if (loading) {
-    return <div className="text-center text-gray-300">Loading leaderboard...</div>;
-  }
+  const handleRefresh = () => {
+    fetchLeaderboard();
+    if (onRefresh) onRefresh();
+  };
 
-  if (error) {
-    return <div className="text-center text-red-500">{error}</div>;
+  if (loading) {
+    return <div className={`text-center text-gray-300 ${className}`}>Loading leaderboard...</div>;
   }
 
   return (
-    <div className="bg-white/10 rounded-xl p-6 mt-8">
-      <h3 className="text-xl font-bold text-white mb-4">🏆 Leaderboard</h3>
+    <div className={`bg-white/10 rounded-xl p-6 ${className}`}>
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-xl font-bold text-white">🏆 Leaderboard</h3>
+        <button
+          className="text-blue-400 hover:text-blue-300 text-sm"
+          onClick={handleRefresh}
+        >
+          Refresh
+        </button>
+      </div>
       {leaderboard.length === 0 ? (
         <p className="text-center text-gray-400">No attempts yet. Be the first!</p>
       ) : (

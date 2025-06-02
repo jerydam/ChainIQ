@@ -1,3 +1,12 @@
+export interface Question {
+  id: string;
+  question: string;
+  options: string[];
+  correctAnswer: string;
+  explanation: string;
+  tags: string[];
+}
+
 export interface Quiz {
   id: string;
   title: string;
@@ -13,20 +22,11 @@ export interface Quiz {
   nftMetadata: string;
 }
 
-export interface Question {
-  id: string;
-  question: string;
-  options: string[];
-  correctAnswer: string;
-  explanation: string;
-  tags: string[];
-}
-
 export interface UserScore {
   quizId: string;
   quizTitle: string;
   score: number;
   totalQuestions: number;
   completedAt: Date;
-  userAddress: string;
-} 
+  timeTaken?: number;
+}

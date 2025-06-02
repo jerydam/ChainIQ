@@ -1,5 +1,6 @@
 "use client";
 import { useState } from 'react';
+import toast from 'react-hot-toast';
 import type { Quiz } from '@/types/quiz';
 
 interface QuizGeneratorProps {
@@ -12,21 +13,22 @@ export function QuizGenerator({ onQuizGenerated }: QuizGeneratorProps) {
   const [difficulty, setDifficulty] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner');
   const [questionCount, setQuestionCount] = useState(5);
   const [image, setImage] = useState<File | null>(null);
-  const [generationStatus, setGenerationStatus] = useState('');
 
   const generateQuiz = async () => {
     if (!topic) {
-      alert('Please enter a topic.');
+      toast.error('Please enter a topic.');
       return;
     }
     if (!image) {
-      alert('Please upload an image for the NFT.');
+      toast.error('Please upload an image for the NFT.');
+      return;
+    }
+    if (image.size > 5 * 1024 * 1024) {
+      toast.error('Image size must be less than 5MB.');
       return;
     }
 
     setIsGenerating(true);
-    setGenerationStatus('Generating quiz...');
-
     try {
       const formData = new FormData();
       formData.append('topic', topic);
@@ -39,37 +41,20 @@ export function QuizGenerator({ onQuizGenerated }: QuizGeneratorProps) {
         body: formData,
       });
 
-      const text = await response.text();
       if (!response.ok) {
-        let errorMessage = 'Failed to create quiz.';
-        try {
-          const data = JSON.parse(text);
-          errorMessage = data.error || errorMessage;
-        } catch {
-          console.error('Non-JSON response:', text);
-        }
-        throw new Error(errorMessage);
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to create quiz.');
       }
 
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error('Invalid JSON response.');
-      }
-
-      if (!data.quiz) {
-        throw new Error('No quiz data returned.');
-      }
-
-      onQuizGenerated(data.quiz);
-      setGenerationStatus('Quiz created successfully!');
+      const { quiz } = await response.json();
+      if (!quiz) throw new Error('No quiz data returned.');
+      onQuizGenerated(quiz);
+      toast.success('Quiz created successfully!');
     } catch (error: any) {
       console.error('Error creating quiz:', error);
-      setGenerationStatus(`Error: ${error.message}`);
+      toast.error(error.message);
     } finally {
       setIsGenerating(false);
-      setTimeout(() => setGenerationStatus(''), 5000);
     }
   };
 
@@ -92,7 +77,7 @@ export function QuizGenerator({ onQuizGenerated }: QuizGeneratorProps) {
           <select
             value={difficulty}
             onChange={(e) => setDifficulty(e.target.value as 'beginner' | 'intermediate' | 'advanced')}
-            className="w-full p-2 bg-gray-800 text-white rounded border border-gray-600 focus:border-blue-500 focus:ring focus:ring-blue-500/50 hover:bg-gradient-to-r hover:from-gray-700 hover:to-gray-800 transition-all"
+            className="w-full p-2 bg-gray-800 text-white rounded border border-gray-600 focus:border-blue-500 focus:ring focus:ring-blue-500/50"
           >
             <option value="beginner">Beginner</option>
             <option value="intermediate">Intermediate</option>
@@ -115,14 +100,7 @@ export function QuizGenerator({ onQuizGenerated }: QuizGeneratorProps) {
           <input
             type="file"
             accept="image/*"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file && file.size > 5 * 1024 * 1024) {
-                alert('Image size must be less than 5MB.');
-                return;
-              }
-              setImage(file || null);
-            }}
+            onChange={(e) => setImage(e.target.files?.[0] || null)}
             className="w-full p-2 bg-white/5 text-white rounded border border-gray-600 focus:border-blue-500 focus:ring focus:ring-blue-500/50"
           />
         </div>
@@ -140,9 +118,6 @@ export function QuizGenerator({ onQuizGenerated }: QuizGeneratorProps) {
             '🚀 Create Quiz'
           )}
         </button>
-        {generationStatus && (
-          <p className="text-center text-gray-300">{generationStatus}</p>
-        )}
       </div>
     </div>
   );

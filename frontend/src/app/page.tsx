@@ -3,45 +3,25 @@ import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import QuizPlayer from '@/components/QuizPlayer';
 import { QuizGenerator } from '@/components/QuizGenerator';
-import type { Quiz } from '@/types/quiz';
-import { QuizRewardsABI } from '@/abis/QuizAbi';
+import { ConnectWallet } from '@/components/ConnectWallet';
+import { ShareToWarpcast } from '@/components/ShareToWarpcast';
 import Link from 'next/link';
+import type { Quiz } from '@/types/quiz';
+import { useFarcaster } from '@/hook/useFarcaster';
+import { useWallet } from '@/components/context/WalletContext';
 
 export default function Home() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null);
   const [showGenerator, setShowGenerator] = useState(false);
-  const [userAddress, setUserAddress] = useState<string | null>(null);
   const [participation, setParticipation] = useState<{ [quizId: string]: boolean }>({});
   const [error, setError] = useState<string | null>(null);
   const contractAddress = process.env.NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS || '';
-
+  const { userAddress, username, isConnected, error: walletError } = useWallet();
+  
   useEffect(() => {
     fetchQuizzes();
-    connectWallet();
   }, []);
-
-  const connectWallet = async () => {
-    if (typeof window === 'undefined' || !window.ethereum) {
-      setError('MetaMask not detected. Please install MetaMask.');
-      return;
-    }
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const accounts = await provider.send('eth_requestAccounts', []);
-      if (accounts.length === 0) {
-        setError('No wallet accounts found.');
-        return;
-      }
-      setUserAddress(accounts[0]);
-      window.ethereum.on('accountsChanged', (newAccounts: string[]) => {
-        setUserAddress(newAccounts[0] || null);
-      });
-    } catch (err: any) {
-      console.error('Wallet connection error:', err);
-      setError('Failed to connect wallet: ' + err.message);
-    }
-  };
 
   const fetchQuizzes = async () => {
     try {
@@ -107,6 +87,7 @@ export default function Home() {
           </h1>
           <p className="mt-3 text-lg text-gray-300">
             Learn, earn, and mint NFTs on the Celo blockchain
+            {username && `, ${username}!`}
           </p>
           <Link href="/rewards">
             <button className="mt-4 px-6 py-2 bg-gradient-to-r from-yellow-400 to-orange-400 hover:from-yellow-500 hover:to-orange-500 text-black font-semibold rounded-full transition-all duration-300">
@@ -115,27 +96,23 @@ export default function Home() {
           </Link>
         </header>
 
-        {error && (
+        {(error || walletError) && (
           <div className="mb-8 p-4 bg-red-500/20 text-red-300 rounded-lg text-center">
-            {error}
+            {error || walletError}
           </div>
         )}
 
-        <div className="flex justify-center mb-8">
-          {userAddress ? (
-            <div className="flex items-center space-x-3 bg-gray-800/50 rounded-full px-4 py-2 border border-blue-500/30">
-              <span className="text-sm text-blue-300">
-                Connected: {userAddress.slice(0, 6)}...{userAddress.slice(-4)}
-              </span>
-              <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-            </div>
-          ) : (
-            <button
-              onClick={connectWallet}
-              className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold rounded-full shadow-lg hover:shadow-xl transition-all duration-300"
-            >
-              Connect Wallet
-            </button>
+        <div className="flex justify-center mb-8 space-x-4">
+          <ConnectWallet
+            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold rounded-lg transition-all"
+          />
+          {isConnected && selectedQuiz && (
+            <ShareToWarpcast
+              quizTitle={selectedQuiz.title}
+              quizId={selectedQuiz.id}
+              userAddress={userAddress || ''}
+              username={username || ''}
+            />
           )}
         </div>
 
@@ -166,18 +143,29 @@ export default function Home() {
                 ) : (
                   <div className="space-y-8">
                     {quizzes.map((quiz) => (
-                      <div key={quiz.id} className="bg-gray-800/40 backdrop-blur-sm rounded-2xl p-6 border border-blue-500/20 hover:border-blue-500/50 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300">
+                      <div
+                        key={quiz.id}
+                        className="bg-gray-800/40 backdrop-blur-sm rounded-2xl p-6 border border-blue-500/20 hover:border-blue-500/50 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300"
+                      >
                         <h3 className="text-xl font-semibold text-blue-200 mb-2">{quiz.title}</h3>
                         <p className="text-gray-300 text-sm mb-4 line-clamp-2">{quiz.description}</p>
                         <div className="flex justify-between items-center">
                           <span className="text-xs text-gray-400">
                             {participation[quiz.id] ? 'Completed (Perfect Score)' : 'Not Completed'}
                           </span>
-                          <Link href={`/quiz/${quiz.id}`}>
-                            <button className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-medium rounded-lg shadow-md hover:shadow-lg transition-all duration-200">
-                              {participation[quiz.id] ? 'View Results' : 'Take Quiz'}
-                            </button>
-                          </Link>
+                          <div className="space-x-2">
+                            <Link href={`/quiz/${quiz.id}`}>
+                              <button className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-medium rounded-lg shadow-md hover:shadow-lg transition-all duration-200">
+                                {participation[quiz.id] ? 'View Results' : 'Take Quiz'}
+                              </button>
+                            </Link>
+                            <ShareToWarpcast
+                              quizTitle={quiz.title}
+                              quizId={quiz.id}
+                              userAddress={userAddress || ''}
+                              username={username || ''}
+                            />
+                          </div>
                         </div>
                       </div>
                     ))}

@@ -1,3 +1,4 @@
+// app/api/leaderboard/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { open } from 'sqlite';
 import sqlite3 from 'sqlite3';
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
 
     // Fetch all attempts for the quiz
     const attempts = await db.all(
-      'SELECT address, score, createdAt FROM quiz_attempts WHERE quizId = ? ORDER BY address, createdAt ASC',
+      'SELECT address, score, createdAt, timeTaken FROM quiz_attempts WHERE quizId = ? ORDER BY address, createdAt ASC',
       [quizId]
     );
 
@@ -53,7 +54,7 @@ export async function GET(req: NextRequest) {
       if (playerAttempts.length > 1) {
         const firstAttempt = new Date(playerAttempts[0].createdAt).getTime();
         const lastAttempt = new Date(playerAttempts[playerAttempts.length - 1].createdAt).getTime();
-        totalTimeMs = lastAttempt - firstAttempt;
+        totalTimeMs = lastAttempt - firstAttempt + playerAttempts.reduce((sum, a) => sum + (a.timeTaken * 1000 || 0), 0);
       }
 
       leaderboard.push({
