@@ -19,6 +19,7 @@ export interface Quiz {
   createdAt: Date;
   rewardType: string;
   rewardAmount: number;
+  createdBy?: string; // Track who created the quiz
   nftMetadata: string;
 }
 

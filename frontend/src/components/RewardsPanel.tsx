@@ -1,9 +1,12 @@
-// components/RewardsPanel.tsx
 'use client';
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import type { UserScore } from '@/types/quiz';
-import { QuizRewardsABI } from '@/abis/QuizAbi';
+import { QuizRewardsABI } from '@/lib/QuizAbi'; // Ensure this points to the provided ABI
+import { createWalletClient, custom } from 'viem';
+import { celo } from 'viem/chains';
+import { sendTransactionWithDivvi } from '@/lib/divvi';
+import toast from 'react-hot-toast';
 
 interface RewardsPanelProps {
   userScores: UserScore[];
@@ -16,7 +19,7 @@ export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPa
   const [claimedNFTs, setClaimedNFTs] = useState<{ [quizId: string]: boolean }>({});
   const [error, setError] = useState<string | null>(null);
   const contractAddress = process.env.NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS || '';
-  const CELO_ALFAJORES_CHAIN_ID = 44787;
+  const CELO_MAINNET_CHAIN_ID = 0;
 
   useEffect(() => {
     const checkClaimedNFTs = async () => {
@@ -32,38 +35,25 @@ export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPa
       try {
         const provider = new ethers.BrowserProvider(window.ethereum);
         const network = await provider.getNetwork();
-        if (Number(network.chainId) !== CELO_ALFAJORES_CHAIN_ID) {
-          setError('Please switch to Celo Alfajores network');
+        if (Number(network.chainId) !== CELO_MAINNET_CHAIN_ID) {
+          setError('Please switch to Celo Mainnet');
           return;
         }
 
         const contract = new ethers.Contract(contractAddress, QuizRewardsABI, provider);
-        // Debug: Verify contract method exists
-        if (!contract.hasCompletedQuiz) {
-          setError('Contract does not support hasCompletedQuiz function');
-          return;
-        }
-
         const claimed: { [quizId: string]: boolean } = {};
         for (const score of userScores) {
           const quizId = score.quizId;
-          if (!quizId) {
-            console.warn(`Invalid quizId for score:`, score);
-            continue;
-          }
-          // Check if quiz exists
+          if (!quizId) continue;
           const quizData = await contract.quizzes(quizId);
-          if (!quizData.exists) {
-            console.warn(`Quiz does not exist: ${quizId}`);
-            continue;
-          }
+          if (!quizData.exists) continue;
           const hasCompleted = await contract.hasCompletedQuiz(userAddress, quizId);
-          claimed[quizId] = hasCompleted; // Assume completion may indicate claimed
+          claimed[quizId] = hasCompleted;
         }
         setClaimedNFTs(claimed);
         setError(null);
       } catch (err: any) {
-        console.error('Error checking quiz completions:', err);
+        console.error('Error checking claimed NFTs:', err);
         setError(err.message || 'Failed to check quiz completions');
       }
     };
@@ -79,15 +69,15 @@ export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPa
 
   const handleClaimReward = async (scoreId: string) => {
     if (!isConnected || !userAddress) {
-      alert('Please connect your wallet to claim rewards.');
+      toast.error('Please connect your wallet to claim rewards.');
       return;
     }
     if (!contractAddress) {
-      alert('Contract address is not configured.');
+      toast.error('Contract address is not configured.');
       return;
     }
     if (typeof window === 'undefined' || !window.ethereum) {
-      alert('No wallet provider detected');
+      toast.error('No wallet provider detected.');
       return;
     }
 
@@ -97,58 +87,57 @@ export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPa
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const network = await provider.getNetwork();
-      if (Number(network.chainId) !== CELO_ALFAJORES_CHAIN_ID) {
+      if (Number(network.chainId) !== CELO_MAINNET_CHAIN_ID) {
         try {
           await window.ethereum.request({
             method: 'wallet_switchEthereumChain',
-            params: [{ chainId: `0x${CELO_ALFAJORES_CHAIN_ID.toString(16)}` }],
+            params: [{ chainId: `0x${CELO_MAINNET_CHAIN_ID.toString(16)}` }],
           });
         } catch (switchError: any) {
-          throw new Error('Please switch to Celo Alfajores network');
+          throw new Error('Please switch to Celo Mainnet');
         }
       }
 
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(contractAddress, QuizRewardsABI, signer);
-      if (!contract.claimNFTReward) {
-        throw new Error('Contract does not support claimNFTReward function');
-      }
-
-      const quizId = scoreId;
-      let gasEstimate: bigint;
-      try {
-        gasEstimate = await contract.claimNFTReward.estimateGas(quizId);
-      } catch (err) {
-        throw new Error('Gas estimation failed. Ensure you meet claim requirements.');
-      }
-
-      const tx = await contract.claimNFTReward(quizId, {
-        gasLimit: (gasEstimate * BigInt(120)) / BigInt(100),
+      const walletClient = createWalletClient({
+        chain: celo,
+        transport: custom(window.ethereum!),
       });
-      console.log('Transaction sent:', tx.hash);
-      await tx.wait();
-      console.log('Transaction confirmed');
-      alert('NFT reward claimed successfully! 🎉');
 
-      setClaimedNFTs(prev => ({ ...prev, [quizId]: true }));
+      console.log('Claiming NFT for quizId:', scoreId, 'on contract:', contractAddress);
+      const txHash = await sendTransactionWithDivvi(
+        contract,
+        'claimNFTReward',
+        [scoreId],
+        walletClient,
+        provider
+      );
+      console.log('Claim transaction hash:', txHash);
+
+      toast.success('NFT reward claimed successfully! 🎉');
+      setClaimedNFTs(prev => ({ ...prev, [scoreId]: true }));
     } catch (err: any) {
-      console.error('Error claiming NFT reward:', err);
       let errorMessage = 'Failed to claim NFT reward';
       if (err.code === 'INSUFFICIENT_FUNDS') {
-        errorMessage = 'Insufficient funds for gas fees';
+        errorMessage = 'Insufficient funds for gas fees. Please fund your wallet with CELO.';
+      } else if (err.message.includes('unknown function') || err.message.includes('INVALID_ARGUMENT')) {
+        errorMessage = 'Claim function not found. Please verify the contract address and ABI.';
       } else if (err.reason) {
         errorMessage = err.reason;
       } else if (err.message) {
         errorMessage = err.message;
       }
+      console.error('Claim error:', err);
       setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setClaimingRewards(prev => prev.filter(id => id !== scoreId));
     }
   };
 
   return (
-    <div>
+    <div className="space-y-6">
       <h2 className="text-3xl font-bold text-white mb-6">🏆 Your Rewards</h2>
       {error && (
         <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 mb-6 text-red-400">
@@ -157,13 +146,17 @@ export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPa
       )}
       {!isConnected ? (
         <div className="text-center py-12">
-          <div className="text-6xl mb-4">🔗</div>
+          <div className="text-6xl mb-4" role="img" aria-label="Link emoji">
+            🔗
+          </div>
           <h3 className="text-xl font-bold text-white mb-2">Connect Your Wallet</h3>
           <p className="text-gray-400 mb-6">Connect your wallet to view and claim your quiz rewards</p>
         </div>
       ) : userScores.length === 0 ? (
         <div className="text-center py-12">
-          <div className="text-6xl mb-4">🎮</div>
+          <div className="text-6xl mb-4" role="img" aria-label="Gamepad emoji">
+            🎮
+          </div>
           <h3 className="text-xl font-bold text-white mb-2">No Quiz Results Yet</h3>
           <p className="text-gray-400 mb-6">Complete some quizzes to start earning NFTs!</p>
         </div>
@@ -208,7 +201,8 @@ export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPa
                     <button
                       onClick={() => handleClaimReward(score.quizId)}
                       disabled={claimingRewards.includes(score.quizId)}
-                      className="px-4 py-2 bg-gradient-to-r from-yellow-400 to-orange-400 hover:from-yellow-500 hover:to-orange-500 text-black disabled:from-gray-600 disabled:text-gray-500 font-semibold rounded-full transition-all"
+                      className="px-4 py-2 bg-gradient-to-r from-yellow-400 to-orange-400 hover:from-yellow-500 hover:to-orange-500 text-black disabled:bg-gray-600 disabled:text-gray-400 font-semibold rounded-full transition-all"
+                      aria-label={`Claim NFT for ${score.quizTitle}`}
                     >
                       {claimingRewards.includes(score.quizId) ? (
                         <div className="flex items-center space-x-2">

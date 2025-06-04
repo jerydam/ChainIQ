@@ -7,8 +7,12 @@ import { ConnectWallet } from '@/components/ConnectWallet';
 import { ShareToWarpcast } from '@/components/ShareToWarpcast';
 import Link from 'next/link';
 import type { Quiz } from '@/types/quiz';
-import { useFarcaster } from '@/hook/useFarcaster';
 import { useWallet } from '@/components/context/WalletContext';
+import { QuizRewardsABI } from '@/lib/QuizAbi'; // Consistent with RewardsPanel.tsx
+import { createWalletClient, custom } from 'viem';
+import { celo, celoAlfajores } from 'viem/chains';
+import { sendTransactionWithDivvi } from '@/lib/divvi';
+import toast from 'react-hot-toast';
 
 export default function Home() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -16,9 +20,10 @@ export default function Home() {
   const [showGenerator, setShowGenerator] = useState(false);
   const [participation, setParticipation] = useState<{ [quizId: string]: boolean }>({});
   const [error, setError] = useState<string | null>(null);
-  const contractAddress = process.env.NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS || '';
+  const [isCheckingIn, setIsCheckingIn] = useState(false);
+  const contractAddress: string = process.env.NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS || '';
   const { userAddress, username, isConnected, error: walletError } = useWallet();
-  
+
   useEffect(() => {
     fetchQuizzes();
   }, []);
@@ -32,8 +37,9 @@ export default function Home() {
       const data = await response.json();
       setQuizzes(data);
     } catch (err: any) {
-      console.error('Error fetching quizzes:', err);
-      setError('Failed to fetch quizzes: ' + err.message);
+      const errorMessage = 'Failed to fetch quizzes: ' + err.message;
+      setError(errorMessage);
+      toast.error(errorMessage);
     }
   };
 
@@ -42,7 +48,7 @@ export default function Home() {
     try {
       const quizResponse = await fetch(`/api/quizzes?id=${quizId}`);
       if (!quizResponse.ok) {
-        console.error(`Failed to fetch quiz ${quizId}`);
+        console.warn(`Quiz ${quizId} not found: ${quizResponse.status}`);
         return false;
       }
       const quiz = await quizResponse.json();
@@ -55,7 +61,7 @@ export default function Home() {
       }
       return false;
     } catch (err: any) {
-      console.error(`Error checking participation for quiz ${quizId}:`, err);
+      console.error(`Error checking participation for ${quizId}: ${err.message}`);
       return false;
     }
   };
@@ -69,13 +75,100 @@ export default function Home() {
         }
         setParticipation(newParticipation);
       };
-      updateParticipation();
+      updateParticipation().catch((err) =>
+        console.error('Error updating participation:', err.message)
+      );
     }
   }, [userAddress, quizzes]);
 
   const handleQuizGenerated = (quiz: Quiz) => {
     setQuizzes([...quizzes, quiz]);
     setShowGenerator(false);
+    toast.success('Quiz created successfully!');
+  };
+
+  const handleCheckIn = async () => {
+    if (!isConnected || !userAddress) {
+      toast.error('Please connect your wallet.');
+      return;
+    }
+    if (!contractAddress) {
+      toast.error('Contract address is not configured.');
+      console.error('NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS is missing.');
+      return;
+    }
+    if (typeof window === 'undefined' || !window.ethereum) {
+      toast.error('No wallet provider detected.');
+      return;
+    }
+  
+    setIsCheckingIn(true);
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const network = await provider.getNetwork();
+      const currentChainId = Number(network.chainId);
+      
+      // Accept both Celo mainnet (42220) and testnet (44787)
+      const supportedChains = [42220, 44787]; // Celo mainnet and Alfajores testnet
+      
+      if (!supportedChains.includes(currentChainId)) {
+        try {
+          // Try to switch to Celo mainnet first
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: `0x${(42220).toString(16)}` }], // Celo mainnet
+          });
+        } catch (switchError: any) {
+          if (switchError.code === 4902) {
+            // Chain not added, try Alfajores testnet
+            try {
+              await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: `0x${(44787).toString(16)}` }], // Alfajores testnet
+              });
+            } catch (testnetError: any) {
+              throw new Error('Please switch to Celo network (mainnet or testnet).');
+            }
+          } else {
+            throw new Error('Please switch to Celo network.');
+          }
+        }
+      }
+  
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(contractAddress, QuizRewardsABI, signer);
+      const walletClient = createWalletClient({
+        chain: currentChainId === 44787 ? celoAlfajores : celo,
+        transport: custom(window.ethereum),
+      });
+  
+      console.log('Calling checkIn on contract:', contractAddress);
+      const txHash = await sendTransactionWithDivvi(
+        contract,
+        'checkIn',
+        [],
+        walletClient,
+        provider
+      );
+      console.log('Check-in transaction hash:', txHash);
+  
+      toast.success('Successfully checked in! 🎉');
+    } catch (err: any) {
+      let errorMessage = err.message || 'Failed to check in';
+      if (err.code === 'INSUFFICIENT_FUNDS') {
+        errorMessage = 'Insufficient funds for gas. Please fund your wallet with CELO.';
+      } else if (err.message.includes('unknown function') || err.message.includes('INVALID_ARGUMENT')) {
+        errorMessage = 'Check-in function not found. Please verify the contract address and ABI.';
+        console.error('Contract ABI mismatch or incorrect address:', contractAddress, err);
+      } else if (err.message.includes('already checked in')) {
+        errorMessage = 'You have already checked in today.';
+      }
+      console.error('Check-in error:', err);
+      toast.error(errorMessage);
+      setError(errorMessage);
+    } finally {
+      setIsCheckingIn(false);
+    }
   };
 
   return (
@@ -89,11 +182,20 @@ export default function Home() {
             Learn, earn, and mint NFTs on the Celo blockchain
             {username && `, ${username}!`}
           </p>
-          <Link href="/rewards">
-            <button className="mt-4 px-6 py-2 bg-gradient-to-r from-yellow-400 to-orange-400 hover:from-yellow-500 hover:to-orange-500 text-black font-semibold rounded-full transition-all duration-300">
-              🏆 View Rewards
+          <div className="mt-4 space-x-4">
+            <Link href="/rewards">
+              <button className="px-6 py-2 bg-gradient-to-r from-yellow-400 to-orange-400 hover:from-yellow-500 hover:to-orange-500 text-black font-semibold rounded-full transition-all duration-300">
+                🏆 View Rewards
+              </button>
+            </Link>
+            <button
+              onClick={handleCheckIn}
+              disabled={isCheckingIn || !isConnected}
+              className="px-6 py-2 bg-gradient-to-r from-green-400 to-teal-400 hover:from-green-500 hover:to-teal-500 text-black font-semibold rounded-full transition-all duration-300 disabled:bg-gray-600"
+            >
+              {isCheckingIn ? 'Checking In...' : '✅ Check In'}
             </button>
-          </Link>
+          </div>
         </header>
 
         {(error || walletError) && (

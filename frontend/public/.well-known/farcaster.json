@@ -24,7 +24,7 @@
     "ogTitle": "ChainIQ",
     "ogDescription": "Take quizzes and earn rewards on Celo!",
     "ogImageUrl": "https://ChainIQ.vercel.app/og.png",
-    "requiredChains": ["eip155:44787"],
+    "requiredChains": ["eip155:42220"],
     "requiredCapabilities": ["actions.signIn", "wallet.getEthereumProvider"]
   }
 }

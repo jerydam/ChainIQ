@@ -1,19 +1,18 @@
-// components/QuizPlayer.tsx
-'use client';
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { useRouter } from 'next/navigation';
 import { Quiz, Question } from '@/types/quiz';
-import { QuizRewardsABI } from '@/abis/QuizAbi';
+import { QuizRewardsABI } from '@/lib/QuizAbi';
 import toast from 'react-hot-toast';
 import { useWallet } from '@/components/context/WalletContext';
-
-const setTimeout = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
+import { createWalletClient, custom } from 'viem';
+import { celo } from 'viem/chains';
+import { sendTransactionWithDivvi } from '@/lib/divvi';
 
 interface QuizPlayerProps {
   quiz: Quiz;
   isFrame?: boolean;
-  onComplete?: () => void; // New prop for callback
+  onComplete?: () => void;
 }
 
 const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false, onComplete }) => {
@@ -29,39 +28,35 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false, onComple
   const [startTime, setStartTime] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-useEffect(() => {
-  if (isFrame) return;
+  useEffect(() => {
+    if (isFrame) return;
 
-  const initialize = async () => {
-    if (!userAddress) return;
-    try {
-      const response = await fetch(`/api/quizAttempts?quizId=${quiz.id}&address=${userAddress}`);
-      if (response.ok) {
-        const { attempt, allAttempts } = await response.json();
-        if (attempt && attempt.score === quiz.questions.length) {
-          setHasPerfectScore(true);
-          setScore(attempt.score);
-          setIsQuizComplete(true);
-        } else if (attempt) {
-          setScore(attempt.score);
+    const initialize = async () => {
+      if (!userAddress) return;
+      try {
+        const response = await fetch(`/api/quizAttempts?quizId=${quiz.id}&address=${userAddress}`);
+        if (response.ok) {
+          const { attempt, allAttempts } = await response.json();
+          if (attempt && attempt.score === quiz.questions.length) {
+            setHasPerfectScore(true);
+            setScore(attempt.score);
+            setIsQuizComplete(true);
+          } else if (attempt) {
+            setScore(attempt.score);
+          }
+          setAttemptCount(allAttempts ? allAttempts.length : 0);
+        } else {
+          toast.error('Failed to load quiz data.');
         }
-        setAttemptCount(allAttempts ? allAttempts.length : 0);
-      } else {
-        console.error('Failed to fetch attempts:', response.status, await response.text());
+      } catch (err: any) {
         toast.error('Failed to load quiz data.');
       }
-    } catch (err: unknown) {
-      const error = err as Error;
-      console.error('Initialization error:', error);
-      toast.error('Failed to load quiz data.');
-    }
-  };
-  initialize();
-  setStartTime(Date.now());
-}, [quiz.id, quiz.questions.length, userAddress, isFrame]); // Added quiz.questions.length
+    };
+    initialize();
+    setStartTime(Date.now());
+  }, [quiz.id, quiz.questions.length, userAddress, isFrame]);
 
- 
-useEffect(() => {
+  useEffect(() => {
     if (isFrame || isQuizComplete || hasPerfectScore) return;
 
     const interval = setInterval(() => {
@@ -76,7 +71,7 @@ useEffect(() => {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [currentQuestionIndex, isQuizComplete, hasPerfectScore, isFrame, ]);
+  }, [currentQuestionIndex, isQuizComplete, hasPerfectScore, isFrame]);
 
   const handleAnswerSelect = (answer: string) => {
     setSelectedAnswer(answer);
@@ -101,7 +96,7 @@ useEffect(() => {
     } else {
       setIsQuizComplete(true);
       await submitQuiz();
-      if (onComplete) onComplete(); // Trigger callback on completion
+      if (onComplete) onComplete();
     }
   };
 
@@ -116,9 +111,8 @@ useEffect(() => {
       const endTime = Date.now();
       const timeTaken = startTime ? (endTime - startTime) / 1000 : 0;
 
-      // Save quiz attempt (non-critical)
+      // Save quiz attempt
       try {
-        console.log('Submitting quiz attempt:', { quizId: quiz.id, address: userAddress, score, timeTaken });
         const attemptResponse = await fetch('/api/quizAttempts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -129,16 +123,12 @@ useEffect(() => {
             timeTaken,
           }),
         });
-        const responseText = await attemptResponse.text();
-        console.log('API response:', attemptResponse.status, responseText);
         if (attemptResponse.ok) {
           setAttemptCount(prev => prev + 1);
         } else {
-          console.warn('Failed to save quiz attempt:', responseText);
           toast.error('Failed to save quiz attempt, but proceeding with blockchain.');
         }
       } catch (apiErr: any) {
-        console.warn('API error:', apiErr.message);
         toast.error('Failed to save quiz attempt, but proceeding with blockchain.');
       }
 
@@ -150,78 +140,53 @@ useEffect(() => {
         }
 
         const provider = new ethers.BrowserProvider(window.ethereum);
-        const signer = await provider.getSigner();
         const network = await provider.getNetwork();
-        if (network.chainId.toString() !== '44787') {
+        if (Number(network.chainId) !== celo.id) {
           try {
             await window.ethereum.request({
               method: 'wallet_switchEthereumChain',
-              params: [{ chainId: `0x${(44787).toString(16)}` }],
+              params: [{ chainId: `0x${celo.id.toString(16)}` }],
             });
           } catch (switchError: any) {
-            throw new Error('Please switch to Celo Alfajores network');
+            throw new Error('Please switch to Celo Mainnet');
           }
         }
 
+        const signer = await provider.getSigner();
         const contract = new ethers.Contract(
           process.env.NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS!,
           QuizRewardsABI,
           signer
         );
-        const maxRetries = 5;
+        const walletClient = createWalletClient({
+          chain: celo,
+          transport: custom(window.ethereum!),
+        });
 
-        // Record quiz completion
-        let lastError: any;
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          try {
-            const gasEstimate = await contract.recordQuizCompletion.estimateGas(quiz.id);
-            const tx = await contract.recordQuizCompletion(quiz.id, {
-              gasLimit: (gasEstimate * BigInt(120)) / BigInt(100),
-            });
-            await tx.wait();
-            console.log('Quiz completion recorded:', tx.hash);
-            toast.success('Quiz completion recorded on blockchain!');
-            lastError = null;
-            break;
-          } catch (err: any) {
-            lastError = err;
-            console.error(`Record attempt ${attempt}/${maxRetries} failed:`, err);
-            if (attempt < maxRetries && err.code === 'TIMEOUT') {
-              await setTimeout(2000);
-              continue;
-            }
-          }
-        }
-        if (lastError) throw new Error(`Failed to record quiz completion: ${lastError.message}`);
+        // Record quiz completion with Divvi
+        await sendTransactionWithDivvi(
+          contract,
+          'recordQuizCompletion',
+          [quiz.id],
+          walletClient,
+          provider
+        );
+        toast.success('Quiz completion recorded on blockchain!');
 
-        // Claim NFT
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          try {
-            const gasEstimate = await contract.claimNFTReward.estimateGas(quiz.id);
-            const tx = await contract.claimNFTReward(quiz.id, {
-              gasLimit: (gasEstimate * BigInt(120)) / BigInt(100),
-            });
-            await tx.wait();
-            console.log('NFT claimed:', tx.hash);
-            toast.success('NFT reward claimed successfully! 🎉');
-            lastError = null;
-            break;
-          } catch (err: any) {
-            lastError = err;
-            console.error(`Claim attempt ${attempt}/${maxRetries} failed:`, err);
-            if (attempt < maxRetries && err.code === 'TIMEOUT') {
-              await setTimeout(2000);
-              continue;
-            }
-          }
-        }
-        if (lastError) throw new Error(`Failed to claim NFT: ${lastError.message}`);
+        // Claim NFT with Divvi
+        await sendTransactionWithDivvi(
+          contract,
+          'claimNFTReward',
+          [quiz.id],
+          walletClient,
+          provider
+        );
+        toast.success('NFT reward claimed successfully! 🎉');
       }
     } catch (err: any) {
-      console.error('Error submitting quiz:', err);
       toast.error(
         err.message.includes('INSUFFICIENT_FUNDS')
-          ? 'Insufficient funds for gas. Get testnet CELO at https://faucet.celo.org.'
+          ? 'Insufficient funds for gas. Get CELO at a faucet.'
           : err.message
       );
     } finally {
@@ -245,7 +210,7 @@ useEffect(() => {
   if (hasPerfectScore && !isFrame) {
     return (
       <div className="p-4 bg-gray-800/50 rounded-xl">
-        <h2 className="text-2xl font-bold text-blue-300">You&apos;ve Mastered the Quiz!</h2>
+        <h2 className="text-2xl font-bold text-blue-300">You've Mastered the Quiz!</h2>
         <p className="text-gray-300">
           Perfect score: {score}/{quiz.questions.length}. NFT minted!
         </p>
@@ -308,7 +273,7 @@ useEffect(() => {
           <button
             key={index}
             className={`block w-full text-left p-2 rounded ${
-              selectedAnswer === option ? 'bg-blue-500 text-white' : 'bg-gray-600 hover:bg-gray-500 text-gray-200'
+              selectedAnswer === option ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
             }`}
             onClick={() => handleAnswerSelect(option)}
             disabled={isLoading}
@@ -318,9 +283,9 @@ useEffect(() => {
         ))}
       </div>
       <button
-        className="mt-4 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
+        className="mt-4 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
         onClick={() => handleNextQuestion()}
-        disabled={isLoading}
+        disabled={false}
       >
         {isLoading ? 'Processing...' : 'Next'}
       </button>

@@ -1,29 +1,26 @@
-// app/layout.tsx
 'use client';
 import './globals.css';
 import { WalletProvider } from '@/components/context/WalletContext';
 import { WagmiProvider, createConfig, http } from 'wagmi';
-import { celoAlfajores } from 'wagmi/chains';
+import { celo } from 'wagmi/chains';
 import { injected } from 'wagmi/connectors';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode, useMemo } from 'react';
 
-// Create a QueryClient instance
 const queryClient = new QueryClient();
 
 export default function RootLayout({ children }: { children: ReactNode }) {
-  // Define wagmiConfig inside the component using useMemo to prevent recreation on every render
   const wagmiConfig = useMemo(
     () =>
       createConfig({
-        chains: [celoAlfajores],
+        chains: [celo],
         connectors: [injected()],
         transports: {
-          [celoAlfajores.id]: http(),
+          [celo.id]: http(),
         },
-        storage: null, // Disable persistence to avoid serialization issues
+        storage: null,
       }),
-    [] // Empty dependency array ensures it’s created once
+    []
   );
 
   return (

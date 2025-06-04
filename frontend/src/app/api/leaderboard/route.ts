@@ -1,37 +1,32 @@
-// app/api/leaderboard/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { open } from 'sqlite';
-import sqlite3 from 'sqlite3';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(req: NextRequest) {
   try {
-    const db = await open({
-      filename: './quizzes.db',
-      driver: sqlite3.Database,
-    });
-
     const quizId = req.nextUrl.searchParams.get('quizId');
     if (!quizId) {
-      await db.close();
       return NextResponse.json({ error: 'Missing quizId' }, { status: 400 });
     }
 
     // Get quiz question count
-    const quizResponse = await fetch(`https://chainiq.vercel.app/api/quizzes?id=${quizId}`, {
-      cache: 'no-store',
-    });
+    const quizResponse = await fetch(`https://chainiq.vercel.app/api/quizzes?id=${quizId}`, { cache: 'no-store' });
     if (!quizResponse.ok) {
-      await db.close();
       return NextResponse.json({ error: 'Quiz not found' }, { status: 404 });
     }
     const quiz = await quizResponse.json();
     const totalQuestions = quiz.questions.length;
 
     // Fetch all attempts for the quiz
-    const attempts = await db.all(
-      'SELECT address, score, createdAt, timeTaken FROM quiz_attempts WHERE quizId = ? ORDER BY address, createdAt ASC',
-      [quizId]
-    );
+    const { data: attempts, error } = await supabase
+      .from('quiz_attempts')
+      .select('address, score, createdAt, timeTaken')
+      .eq('quizId', quizId)
+      .order('address', { ascending: true })
+      .order('createdAt', { ascending: true });
+
+    if (error) {
+      throw new Error(`Failed to fetch attempts: ${error.message}`);
+    }
 
     // Aggregate leaderboard data
     const leaderboard = [];
@@ -60,7 +55,7 @@ export async function GET(req: NextRequest) {
       leaderboard.push({
         address: `${address.slice(0, 6)}...${address.slice(-4)}`,
         attemptsUntilPerfect,
-        totalTime: totalTimeMs / 1000, // Seconds
+        totalTime: totalTimeMs / 1000,
       });
     }
 
@@ -72,7 +67,6 @@ export async function GET(req: NextRequest) {
       return a.totalTime - b.totalTime;
     });
 
-    await db.close();
     return NextResponse.json(leaderboard, { status: 200 });
   } catch (error: any) {
     console.error('Error fetching leaderboard:', error);
