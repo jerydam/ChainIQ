@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import type { UserScore } from '@/types/quiz';
-import { QuizRewardsABI } from '@/lib/QuizAbi'; // Ensure this points to the provided ABI
+import { QuizRewardsABI } from '@/lib/QuizAbi';
 import { createWalletClient, custom } from 'viem';
 import { celo } from 'viem/chains';
 import { sendTransactionWithDivvi } from '@/lib/divvi';
@@ -19,7 +19,7 @@ export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPa
   const [claimedNFTs, setClaimedNFTs] = useState<{ [quizId: string]: boolean }>({});
   const [error, setError] = useState<string | null>(null);
   const contractAddress = process.env.NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS || '';
-  const CELO_MAINNET_CHAIN_ID = 0;
+  const CELO_MAINNET_CHAIN_ID = celo.id; // Use viem's celo chain ID
 
   useEffect(() => {
     const checkClaimedNFTs = async () => {

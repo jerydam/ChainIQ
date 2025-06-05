@@ -46,9 +46,11 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false, onComple
           }
           setAttemptCount(allAttempts ? allAttempts.length : 0);
         } else {
+          console.error('Failed to load quiz data:', response.status, response.statusText);
           toast.error('Failed to load quiz data.');
         }
       } catch (err: any) {
+        console.error('Error fetching quiz attempts:', err);
         toast.error('Failed to load quiz data.');
       }
     };
@@ -126,9 +128,11 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false, onComple
         if (attemptResponse.ok) {
           setAttemptCount(prev => prev + 1);
         } else {
+          console.error('Failed to save quiz attempt:', attemptResponse.status, attemptResponse.statusText);
           toast.error('Failed to save quiz attempt, but proceeding with blockchain.');
         }
       } catch (apiErr: any) {
+        console.error('Error saving quiz attempt:', apiErr);
         toast.error('Failed to save quiz attempt, but proceeding with blockchain.');
       }
 
@@ -184,6 +188,7 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false, onComple
         toast.success('NFT reward claimed successfully! 🎉');
       }
     } catch (err: any) {
+      console.error('Error submitting quiz:', err);
       toast.error(
         err.message.includes('INSUFFICIENT_FUNDS')
           ? 'Insufficient funds for gas. Get CELO at a faucet.'
@@ -285,7 +290,7 @@ const QuizPlayer: React.FC<QuizPlayerProps> = ({ quiz, isFrame = false, onComple
       <button
         className="mt-4 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
         onClick={() => handleNextQuestion()}
-        disabled={false}
+        disabled={isLoading}
       >
         {isLoading ? 'Processing...' : 'Next'}
       </button>

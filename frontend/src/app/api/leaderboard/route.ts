@@ -19,10 +19,10 @@ export async function GET(req: NextRequest) {
     // Fetch all attempts for the quiz
     const { data: attempts, error } = await supabase
       .from('quiz_attempts')
-      .select('address, score, createdAt, timeTaken')
-      .eq('quizId', quizId)
+      .select('address, score, created_at, time_taken')
+      .eq('quiz_id', quizId)
       .order('address', { ascending: true })
-      .order('createdAt', { ascending: true });
+      .order('created_at', { ascending: true });
 
     if (error) {
       throw new Error(`Failed to fetch attempts: ${error.message}`);
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     for (const address of players) {
       const playerAttempts = attempts
         .filter(a => a.address === address)
-        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
       let attemptsUntilPerfect = playerAttempts.length;
       let totalTimeMs = 0;
@@ -47,9 +47,9 @@ export async function GET(req: NextRequest) {
       }
 
       if (playerAttempts.length > 1) {
-        const firstAttempt = new Date(playerAttempts[0].createdAt).getTime();
-        const lastAttempt = new Date(playerAttempts[playerAttempts.length - 1].createdAt).getTime();
-        totalTimeMs = lastAttempt - firstAttempt + playerAttempts.reduce((sum, a) => sum + (a.timeTaken * 1000 || 0), 0);
+        const firstAttempt = new Date(playerAttempts[0].created_at).getTime();
+        const lastAttempt = new Date(playerAttempts[playerAttempts.length - 1].created_at).getTime();
+        totalTimeMs = lastAttempt - firstAttempt + playerAttempts.reduce((sum, a) => sum + (a.time_taken * 1000 || 0), 0);
       }
 
       leaderboard.push({
