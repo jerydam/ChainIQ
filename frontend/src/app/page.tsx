@@ -8,7 +8,7 @@ import { ShareToWarpcast } from '@/components/ShareToWarpcast';
 import Link from 'next/link';
 import type { Quiz } from '@/types/quiz';
 import { useWallet } from '@/components/context/WalletContext';
-import { QuizRewardsABI } from '@/lib/QuizAbi'; // Consistent with RewardsPanel.tsx
+import { QuizRewardsABI } from '@/lib/QuizAbi';
 import { createWalletClient, custom } from 'viem';
 import { celo, celoAlfajores } from 'viem/chains';
 import { sendTransactionWithDivvi } from '@/lib/divvi';
@@ -108,23 +108,20 @@ export default function Home() {
       const network = await provider.getNetwork();
       const currentChainId = Number(network.chainId);
       
-      // Accept both Celo mainnet (42220) and testnet (44787)
-      const supportedChains = [42220, 44787]; // Celo mainnet and Alfajores testnet
+      const supportedChains = [42220, 44787];
       
       if (!supportedChains.includes(currentChainId)) {
         try {
-          // Try to switch to Celo mainnet first
           await window.ethereum.request({
             method: 'wallet_switchEthereumChain',
-            params: [{ chainId: `0x${(42220).toString(16)}` }], // Celo mainnet
+            params: [{ chainId: `0x${(42220).toString(16)}` }],
           });
         } catch (switchError: any) {
           if (switchError.code === 4902) {
-            // Chain not added, try Alfajores testnet
             try {
               await window.ethereum.request({
                 method: 'wallet_switchEthereumChain',
-                params: [{ chainId: `0x${(44787).toString(16)}` }], // Alfajores testnet
+                params: [{ chainId: `0x${(44787).toString(16)}` }],
               });
             } catch (testnetError: any) {
               throw new Error('Please switch to Celo network (mainnet or testnet).');
@@ -172,26 +169,32 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-black text-white py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-black text-white py-6 sm:py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl mx-auto">
-        <header className="text-center mb-12">
-          <h1 className="text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
+        <header className="text-center mb-8 sm:mb-12">
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
             🧠 ChainIQ
           </h1>
-          <p className="mt-3 text-lg text-gray-300">
+          <p className="mt-2 sm:mt-3 text-base sm:text-lg text-gray-300 px-4">
             Learn, earn, and mint NFTs on the Celo blockchain
-            {username && `, ${username}!`}
+            {username && (
+              <span className="block sm:inline">
+                <span className="hidden sm:inline">, </span>
+                <span className="sm:hidden">Welcome, </span>
+                {username}!
+              </span>
+            )}
           </p>
-          <div className="mt-4 space-x-4">
+          <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center">
             <Link href="/rewards">
-              <button className="px-6 py-2 bg-gradient-to-r from-yellow-400 to-orange-400 hover:from-yellow-500 hover:to-orange-500 text-black font-semibold rounded-full transition-all duration-300">
+              <button className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-yellow-400 to-orange-400 hover:from-yellow-500 hover:to-orange-500 text-black font-semibold rounded-full transition-all duration-300 text-sm sm:text-base">
                 🏆 View Rewards
               </button>
             </Link>
             <button
               onClick={handleCheckIn}
               disabled={isCheckingIn || !isConnected}
-              className="px-6 py-2 bg-gradient-to-r from-green-400 to-teal-400 hover:from-green-500 hover:to-teal-500 text-black font-semibold rounded-full transition-all duration-300 disabled:bg-gray-600"
+              className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-green-400 to-teal-400 hover:from-green-500 hover:to-teal-500 text-black font-semibold rounded-full transition-all duration-300 disabled:bg-gray-600 text-sm sm:text-base"
             >
               {isCheckingIn ? 'Checking In...' : '✅ Check In'}
             </button>
@@ -199,22 +202,24 @@ export default function Home() {
         </header>
 
         {(error || walletError) && (
-          <div className="mb-8 p-4 bg-red-500/20 text-red-300 rounded-lg text-center">
+          <div className="mb-6 sm:mb-8 p-4 bg-red-500/20 text-red-300 rounded-lg text-center text-sm sm:text-base">
             {error || walletError}
           </div>
         )}
 
-        <div className="flex justify-center mb-8 space-x-4">
+        <div className="flex flex-col sm:flex-row justify-center mb-6 sm:mb-8 gap-3 sm:gap-4">
           <ConnectWallet
-            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold rounded-lg transition-all"
+            className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold rounded-lg transition-all px-4 py-2 text-sm sm:text-base"
           />
           {isConnected && selectedQuiz && (
-            <ShareToWarpcast
-              quizTitle={selectedQuiz.title}
-              quizId={selectedQuiz.id}
-              userAddress={userAddress || ''}
-              username={username || ''}
-            />
+            <div className="w-full sm:w-auto">
+              <ShareToWarpcast
+                quizTitle={selectedQuiz.title}
+                quizId={selectedQuiz.id}
+                userAddress={userAddress || ''}
+                username={username || ''}
+              />
+            </div>
           )}
         </div>
 
@@ -225,48 +230,50 @@ export default function Home() {
             <QuizGenerator onQuizGenerated={handleQuizGenerated} />
           ) : (
             <div>
-              <div className="flex justify-center mb-10">
+              <div className="flex justify-center mb-8 sm:mb-10">
                 <button
                   onClick={() => setShowGenerator(true)}
-                  className="px-8 py-4 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold text-lg rounded-xl shadow-lg hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300"
+                  className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl shadow-lg hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300"
                 >
                   🚀 Create New Quiz
                 </button>
               </div>
 
               <section>
-                <h2 className="text-3xl font-bold mb-6 text-center bg-clip-text text-transparent bg-gradient-to-r from-blue-300 to-purple-400">
+                <h2 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6 text-center bg-clip-text text-transparent bg-gradient-to-r from-blue-300 to-purple-400">
                   Available Quizzes
                 </h2>
                 {quizzes.length === 0 ? (
-                  <p className="text-center text-gray-400 text-lg animate-pulse">
+                  <p className="text-center text-gray-400 text-base sm:text-lg animate-pulse px-4">
                     No quizzes available. Create one to get started!
                   </p>
                 ) : (
-                  <div className="space-y-8">
+                  <div className="space-y-4 sm:space-y-6 lg:space-y-8">
                     {quizzes.map((quiz) => (
                       <div
                         key={quiz.id}
-                        className="bg-gray-800/40 backdrop-blur-sm rounded-2xl p-6 border border-blue-500/20 hover:border-blue-500/50 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300"
+                        className="bg-gray-800/40 backdrop-blur-sm rounded-xl sm:rounded-2xl p-4 sm:p-6 border border-blue-500/20 hover:border-blue-500/50 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300"
                       >
-                        <h3 className="text-xl font-semibold text-blue-200 mb-2">{quiz.title}</h3>
-                        <p className="text-gray-300 text-sm mb-4 line-clamp-2">{quiz.description}</p>
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs text-gray-400">
+                        <h3 className="text-lg sm:text-xl font-semibold text-blue-200 mb-2">{quiz.title}</h3>
+                        <p className="text-gray-300 text-sm sm:text-base mb-4 line-clamp-2">{quiz.description}</p>
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
+                          <span className="text-xs sm:text-sm text-gray-400">
                             {participation[quiz.id] ? 'Completed (Perfect Score)' : 'Not Completed'}
                           </span>
-                          <div className="space-x-2">
-                            <Link href={`/quiz/${quiz.id}`}>
-                              <button className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-medium rounded-lg shadow-md hover:shadow-lg transition-all duration-200">
+                          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+                            <Link href={`/quiz/${quiz.id}`} className="w-full sm:w-auto">
+                              <button className="w-full sm:w-auto px-3 sm:px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-medium rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-sm sm:text-base">
                                 {participation[quiz.id] ? 'View Results' : 'Take Quiz'}
                               </button>
                             </Link>
-                            <ShareToWarpcast
-                              quizTitle={quiz.title}
-                              quizId={quiz.id}
-                              userAddress={userAddress || ''}
-                              username={username || ''}
-                            />
+                            <div className="w-full sm:w-auto">
+                              <ShareToWarpcast
+                                quizTitle={quiz.title}
+                                quizId={quiz.id}
+                                userAddress={userAddress || ''}
+                                username={username || ''}
+                              />
+                            </div>
                           </div>
                         </div>
                       </div>
