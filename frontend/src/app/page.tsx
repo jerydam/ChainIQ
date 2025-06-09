@@ -13,6 +13,7 @@ import { createWalletClient, custom } from 'viem';
 import { celo, celoAlfajores } from 'viem/chains';
 import { sendTransactionWithDivvi } from '@/lib/divvi';
 import toast from 'react-hot-toast';
+import Image from 'next/image'; 
 
 export default function Home() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -173,7 +174,12 @@ export default function Home() {
       <div className="max-w-5xl mx-auto">
         <header className="text-center mb-8 sm:mb-12">
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
-            🧠 ChainIQ
+            <Image
+              src="/logo.png"
+              alt="ChainIQ Logo"
+              width={200}
+              height={100}
+              className="inline-block mb-2 sm:mb-0" />
           </h1>
           <p className="mt-2 sm:mt-3 text-base sm:text-lg text-gray-300 px-4">
             Learn, earn, and mint NFTs on the Celo blockchain

@@ -25,6 +25,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
   return (
     <html lang="en">
+      <head>
+        <link rel="shortcut icon" href="favicon.png" type="image/x-icon" />
+      </head>
       <body>
         <QueryClientProvider client={queryClient}>
           <WagmiProvider config={wagmiConfig}>
