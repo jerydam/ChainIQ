@@ -1,29 +1,29 @@
 {
   "accountAssociation": {
-    "header": "eyJmaWQiOjEyMzQ1LCJ0eXBlIjoiY3VzdG9keSIsImtleSI6IjB4...YOUR_KEY...In0",
-    "payload": "eyJkb21haW4iOiJxdWl6Y2hhaW4udmVyY2VsLmFwcCJ9",
-    "signature": "0x...YOUR_SIGNATURE..."
+    "header": "",
+    "payload": "",
+    "signature": ""
   },
   "frame": {
-    "version": "1",
-    "name": "ChainIQ",
-    "iconUrl": "https://ChainIQ.vercel.app/icon.png",
-    "homeUrl": "https://ChainIQ.vercel.app",
-    "splashImageUrl": "https://ChainIQ.vercel.app/splash.png",
+    "version": "vNext",
+    "name": "chainIQ",
+    "iconUrl": "https://chainiq.vercel.app/favicon.png",
+    "homeUrl": "https://chainiq.vercel.app",
+    "splashImageUrl": "https://chainiq.vercel.app/splash.png",
     "splashBackgroundColor": "#1a202c",
     "subtitle": "Learn and earn on Celo",
-    "description": "Take quizzes, earn rewards, and mint NFTs on the Celo blockchain with ChainIQ.",
+    "description": "Take quizzes, earn rewards, and mint NFTs on the Celo blockchain with chainIQ.",
     "screenshotUrls": [
-      "https://ChainIQ.vercel.app/screenshot1.png",
-      "https://ChainIQ.vercel.app/screenshot2.png"
+      "https://chainiq.vercel.app/screenshot1.png",
+      "https://chainiq.vercel.app/screenshot2.png"
     ],
     "primaryCategory": "education",
     "tags": ["quiz", "blockchain", "celo", "education", "rewards"],
-    "heroImageUrl": "https://ChainIQ.vercel.app/hero.png",
+    "heroImageUrl": "https://chainiq.vercel.app/hero.png",
     "tagline": "Learn, Earn, Mint NFTs",
-    "ogTitle": "ChainIQ",
+    "ogTitle": "chainIQ",
     "ogDescription": "Take quizzes and earn rewards on Celo!",
-    "ogImageUrl": "https://ChainIQ.vercel.app/og.png",
+    "ogImageUrl": "https://chainiq.vercel.app/logo.png",
     "requiredChains": ["eip155:42220"],
     "requiredCapabilities": ["actions.signIn", "wallet.getEthereumProvider"]
   }

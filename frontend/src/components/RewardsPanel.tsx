@@ -9,26 +9,22 @@ import { sendTransactionWithDivvi } from '@/lib/divvi';
 import toast from 'react-hot-toast';
 
 interface RewardsPanelProps {
-  userScores: UserScore[];
   userAddress: string | null;
   isConnected: boolean;
 }
 
-export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPanelProps) {
+export function RewardsPanel({ userAddress, isConnected }: RewardsPanelProps) {
+  const [userScores, setUserScores] = useState<UserScore[]>([]);
   const [claimingRewards, setClaimingRewards] = useState<string[]>([]);
   const [claimedNFTs, setClaimedNFTs] = useState<{ [quizId: string]: boolean }>({});
   const [error, setError] = useState<string | null>(null);
   const contractAddress = process.env.NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS || '';
-  const CELO_MAINNET_CHAIN_ID = celo.id; // Use viem's celo chain ID
+  const CELO_MAINNET_CHAIN_ID = celo.id;
 
   useEffect(() => {
-    const checkClaimedNFTs = async () => {
-      if (!isConnected || !userAddress || !contractAddress) {
+    const fetchUserScores = async () => {
+      if (!isConnected || !userAddress || !contractAddress || !window.ethereum) {
         setError('Wallet not connected or contract address missing');
-        return;
-      }
-      if (typeof window === 'undefined' || !window.ethereum) {
-        setError('No wallet provider detected');
         return;
       }
 
@@ -41,28 +37,50 @@ export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPa
         }
 
         const contract = new ethers.Contract(contractAddress, QuizRewardsABI, provider);
+        const completions = await contract.getPlayerQuizCompletions(userAddress);
+
+        const quizMap = new Map();
+        const scores: UserScore[] = await Promise.all(
+          completions.map(async (completion: any) => {
+            const quizId = completion.quizId?.toString();
+            if (!quizId) return null;
+            if (!quizMap.has(quizId)) {
+              const quizResponse = await fetch(`/api/quizzes?id=${quizId}`);
+              const quizData = quizResponse.ok ? await quizResponse.json() : { title: 'Unknown Quiz', questions: [] };
+              quizMap.set(quizId, quizData);
+            }
+            const quizData = quizMap.get(quizId);
+            return {
+              quizId,
+              quizTitle: quizData.title || 'Unknown Quiz',
+              score: Number(completion.score) || 0,
+              totalQuestions: quizData.questions?.length || 0,
+              completedAt: new Date(Number(completion.timestamp) * 1000),
+              attempts: Number(completion.attempts) || 0,
+            };
+          })
+        );
+
+        const validScores = scores.filter((score): score is UserScore => score !== null);
+        setUserScores(validScores);
+        setError(null);
+
+        // Check claimed NFTs
         const claimed: { [quizId: string]: boolean } = {};
-        for (const score of userScores) {
-          const quizId = score.quizId;
-          if (!quizId) continue;
-          const quizData = await contract.quizzes(quizId);
-          if (!quizData.exists) continue;
-          const hasCompleted = await contract.hasCompletedQuiz(userAddress, quizId);
-          claimed[quizId] = hasCompleted;
+        for (const score of validScores) {
+          if (!score.quizId) continue;
+          const hasCompleted = await contract.hasCompletedQuiz(userAddress, score.quizId);
+          claimed[score.quizId] = hasCompleted;
         }
         setClaimedNFTs(claimed);
-        setError(null);
       } catch (err: any) {
-        console.error('Error checking claimed NFTs:', err);
-        setError(err.message || 'Failed to check quiz completions');
+        console.error('Error fetching user scores:', err);
+        setError(err.message || 'Failed to fetch quiz completions');
+        setUserScores([]);
       }
     };
-    checkClaimedNFTs();
-  }, [userScores, userAddress, isConnected, contractAddress]);
-
-  const eligibleScores = userScores.filter(
-    score => score.score === score.totalQuestions && !claimedNFTs[score.quizId]
-  );
+    fetchUserScores();
+  }, [userAddress, isConnected, contractAddress]);
 
   const totalRewardsEarned = userScores.filter(score => score.score === score.totalQuestions).length;
   const totalPointsEarned = userScores.reduce((acc, score) => acc + score.score, 0);
@@ -106,15 +124,14 @@ export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPa
       });
 
       console.log('Claiming NFT for quizId:', scoreId, 'on contract:', contractAddress);
-      const txHash = await sendTransactionWithDivvi(
+      await sendTransactionWithDivvi(
         contract,
         'claimNFTReward',
         [scoreId],
         walletClient,
         provider
       );
-      console.log('Claim transaction hash:', txHash);
-
+      console.log('NFT reward claimed successfully');
       toast.success('NFT reward claimed successfully! 🎉');
       setClaimedNFTs(prev => ({ ...prev, [scoreId]: true }));
     } catch (err: any) {
@@ -179,25 +196,25 @@ export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPa
               <div className="text-sm text-gray-400">Keep learning!</div>
             </div>
           </div>
-          {eligibleScores.length > 0 && (
-            <div className="bg-white/10 rounded-xl p-6 mb-6">
-              <h3 className="text-xl font-bold text-white mb-4">🎁 Claimable NFTs</h3>
-              <div className="space-y-3">
-                {eligibleScores.map((score) => (
-                  <div
-                    key={score.quizId}
-                    className="bg-white/10 rounded-lg p-4 flex justify-between items-center"
-                  >
-                    <div>
-                      <h4 className="font-bold text-white">{score.quizTitle}</h4>
-                      <p className="text-sm text-gray-400">
-                        Score: {score.score}/{score.totalQuestions} (
-                        {Math.round((score.score / score.totalQuestions) * 100)}%)
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Completed: {score.completedAt.toLocaleDateString()}
-                      </p>
-                    </div>
+          <div className="bg-white/10 rounded-xl p-6">
+            <h3 className="text-xl font-bold text-white mb-4">📊 Quiz History</h3>
+            <div className="space-y-3">
+              {userScores.map((score) => (
+                <div key={score.quizId} className="bg-white/10 rounded-lg p-4 flex justify-between items-center">
+                  <div>
+                    <h4 className="font-bold text-white">{score.quizTitle}</h4>
+                    <p className="text-sm text-gray-400">
+                      Score: {score.score}/{score.totalQuestions} (
+                      {score.totalQuestions > 0 ? Math.round((score.score / score.totalQuestions) * 100) : 0}%)
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Completed: {score.completedAt.toLocaleDateString()}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Attempts: {score.attempts}
+                    </p>
+                  </div>
+                  {score.quizId && score.score === score.totalQuestions && !claimedNFTs[score.quizId] ? (
                     <button
                       onClick={() => handleClaimReward(score.quizId)}
                       disabled={claimingRewards.includes(score.quizId)}
@@ -213,30 +230,9 @@ export function RewardsPanel({ userScores, userAddress, isConnected }: RewardsPa
                         '🎁 Claim NFT'
                       )}
                     </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="bg-white/10 rounded-xl p-6">
-            <h3 className="text-xl font-bold text-white mb-4">📊 Quiz History</h3>
-            <div className="space-y-3">
-              {userScores.map((score) => (
-                <div key={score.quizId} className="bg-white/10 rounded-lg p-4">
-                  <div className="flex justify-between items-start mb-2">
-                    <h4 className="font-bold text-white">{score.quizTitle}</h4>
-                    <span className="font-bold text-white">
-                      {Math.round((score.score / score.totalQuestions) * 100)}%
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <p className="text-sm text-gray-400">
-                      {score.score}/{score.totalQuestions} correct answers
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {score.completedAt.toLocaleDateString()}
-                    </p>
-                  </div>
+                  ) : score.score === score.totalQuestions && claimedNFTs[score.quizId] ? (
+                    <span className="text-sm text-green-400 font-semibold">NFT Claimed</span>
+                  ) : null}
                 </div>
               ))}
             </div>

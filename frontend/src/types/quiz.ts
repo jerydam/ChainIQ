@@ -19,7 +19,7 @@ export interface Quiz {
   createdAt: Date;
   rewardType: string;
   rewardAmount: number;
-  createdBy?: string; // Track who created the quiz
+  createdBy?: string;
   nftMetadata: string;
 }
 
@@ -30,4 +30,14 @@ export interface UserScore {
   totalQuestions: number;
   completedAt: Date;
   timeTaken?: number;
+  attempts: number; // Added to track attempts until perfect score
+}
+
+// Interface for smart contract QuizCompletion struct
+export interface QuizCompletion {
+  player: string;
+  timestamp: bigint;
+  score: bigint;
+  quizId: string;
+  attempts: bigint;
 }
