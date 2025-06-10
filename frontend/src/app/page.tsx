@@ -156,7 +156,7 @@ export default function Home() {
 
   // Auto-trigger check-in when wallet is connected, address is allowed, and Divvi submission is successful
   useEffect(() => {
-    if (isWalletConnected && isAllowedAddress && isDivviSubmitted && !isCheckingIn && currentNetwork) {
+    if (isWalletConnected && isDivviSubmitted && !isCheckingIn && currentNetwork) {
       console.log('Conditions met, triggering auto check-in after Divvi submission...');
       handleCheckIn();
     }
@@ -279,10 +279,10 @@ export default function Home() {
       return;
     }
 
-    if (!isAllowedAddress) {
-      setCheckInStatus('Your wallet address is not authorized to perform this action.');
-      return;
-    }
+    // if (!isAllowedAddress) {
+    //   setCheckInStatus('Your wallet address is not authorized to perform this action.');
+    //   return;
+    // }
 
     if (!currentNetwork) {
       setCheckInStatus('Please switch to either the Celo or Celo Alfajores network.');
