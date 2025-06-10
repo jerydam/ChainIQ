@@ -14,6 +14,60 @@ import { celo, celoAlfajores } from 'viem/chains';
 import { sendTransactionWithDivvi } from '@/lib/divvi';
 import toast from 'react-hot-toast';
 import Image from 'next/image'; 
+import { Contract } from 'ethers';
+
+// Placeholder for NETWORKS configuration
+const NETWORKS = {
+  celo: {
+    chainId: 42220,
+    name: 'Celo',
+    contractAddress: process.env.NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS || '',
+  },
+  lisk: {
+    chainId: 44787,
+    name: 'Celo Alfajores',
+    contractAddress: process.env.NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS || '',
+  },
+};
+
+// Placeholder for allowed addresses (to be defined based on your requirements)
+const allowedAddresses = [
+  "0x961B6b05ad723a7039De5e32586CF19b706870E5",
+  "0x08f4f4b874f6b55d768258c026d1f75a2c6e10a0",
+  "0xB3121eBb78F3CF34b03dfc285C0e2d9343dCF965",
+  "0xf07ea30f4821c60ffa4ce3d2d816b339207e7475",
+  "0xa4D30Cfd6b2Fec50D94AAe9F2311c961CC217d29",
+  "0xD03Cec8c65a5D9875740552b915F007D76e75497",
+  "0x81193c6ba3E69c4c47FFE2e4b3304985D1914d93",
+  "0xE7eDF84cEdE0a3B20E02A3b540312716EBe1A744",
+  "0x317419Db8EB30cEC60Ebf847581be2F02A688c53",
+  "0x739CC47B744c93c827B72bCCc07Fcb91628FFca2",
+  "0x0307daA1F0d3Ac9e1b78707d18E79B13BE6b7178",
+  "0x2A1ABea47881a380396Aa0D150DC6d01F4C8F9cb",
+  "0xF46F1B3Bea9cdd4102105EE9bAefc83db333354B",
+  "0xd59B83De618561c8FF4E98fC29a1b96ABcBFB18a",
+  "0x49B4593d5fbAA8262d22ECDD43826B55F85E0837",
+  "0x3207D4728c32391405C7122E59CCb115A4af31eA",
+].map((addr) => addr.toLowerCase())
+
+
+// Placeholder for getErrorInfo function
+const getErrorInfo = (error: any) => ({
+  code: error.code || 0,
+  message: error.message || 'Unknown error',
+});
+
+// Placeholder for appendDivviReferralData
+const appendDivviReferralData = (data: string) => {
+  // Implement Divvi referral data logic here
+  return data;
+};
+
+// Placeholder for reportTransactionToDivvi
+const reportTransactionToDivvi = async (txHash: string, chainId: number) => {
+  // Implement Divvi reporting logic here
+  console.log(`Reporting to Divvi: txHash=${txHash}, chainId=${chainId}`);
+};
 
 export default function Home() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -21,13 +75,139 @@ export default function Home() {
   const [showGenerator, setShowGenerator] = useState(false);
   const [participation, setParticipation] = useState<{ [quizId: string]: boolean }>({});
   const [error, setError] = useState<string | null>(null);
+  const [checkInStatus, setCheckInStatus] = useState<string>('');
   const [isCheckingIn, setIsCheckingIn] = useState(false);
+  const [isWalletConnected, setIsWalletConnected] = useState(false);
+  const [isAllowedAddress, setIsAllowedAddress] = useState(false);
+  const [currentNetwork, setCurrentNetwork] = useState<'celo' | 'lisk' | null>(null);
+  const [userAddress, setUserAddress] = useState<string>('');
+  const [isDivviSubmitted, setIsDivviSubmitted] = useState(false);
   const contractAddress: string = process.env.NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS || '';
-  const { userAddress, username, isConnected, error: walletError } = useWallet();
+  const { username, error: walletError } = useWallet();
 
+  // Check wallet connection and address on mount and when wallet changes
   useEffect(() => {
-    fetchQuizzes();
+    const checkWalletConnection = async () => {
+      if (!window.ethereum) {
+        setCheckInStatus('Please install MetaMask or a compatible Web3 wallet.');
+        console.error('window.ethereum not found');
+        return;
+      }
+
+      try {
+        console.log('Checking wallet connection...');
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const accounts = await provider.listAccounts();
+        console.log('Connected accounts:', accounts);
+        if (accounts.length > 0) {
+          const signer = await provider.getSigner();
+          const address = await signer.getAddress();
+          const network = await provider.getNetwork();
+          const chainId = Number(network.chainId);
+          setUserAddress(address);
+          setIsWalletConnected(true);
+          setIsAllowedAddress(allowedAddresses.includes(address.toLowerCase()));
+          setCurrentNetwork(
+            chainId === NETWORKS.celo.chainId
+              ? 'celo'
+              : chainId === NETWORKS.lisk.chainId
+              ? 'lisk'
+              : null
+          );
+          console.log('Wallet connected:', {
+            address,
+            isAllowed: allowedAddresses.includes(address.toLowerCase()),
+            chainId,
+            network:
+              chainId === NETWORKS.celo.chainId
+                ? 'Celo'
+                : chainId === NETWORKS.lisk.chainId
+                ? 'Lisk'
+                : 'Unknown',
+          });
+        } else {
+          setIsWalletConnected(false);
+          setUserAddress('');
+          setIsAllowedAddress(false);
+          setCurrentNetwork(null);
+          console.log('No accounts connected');
+          connectWallet();
+        }
+      } catch (error) {
+        const { message } = getErrorInfo(error);
+        console.error('Error checking wallet connection:', message);
+        setCheckInStatus('Failed to connect to wallet. Please try again.');
+      }
+    };
+
+    checkWalletConnection();
+
+    if (window.ethereum) {
+      window.ethereum.on('accountsChanged', checkWalletConnection);
+      window.ethereum.on('chainChanged', checkWalletConnection);
+    }
+
+    return () => {
+      if (window.ethereum) {
+        window.ethereum.removeListener('accountsChanged', checkWalletConnection);
+        window.ethereum.removeListener('chainChanged', checkWalletConnection);
+      }
+    };
   }, []);
+
+  // Auto-trigger check-in when wallet is connected, address is allowed, and Divvi submission is successful
+  useEffect(() => {
+    if (isWalletConnected && isDivviSubmitted && !isCheckingIn && currentNetwork) {
+      console.log('Conditions met, triggering auto check-in after Divvi submission...');
+      handleCheckIn();
+    }
+  }, [isWalletConnected, isDivviSubmitted, currentNetwork]);
+
+  const connectWallet = async () => {
+    if (!window.ethereum) {
+      setCheckInStatus('Please install MetaMask or a compatible Web3 wallet.');
+      return;
+    }
+
+    try {
+      console.log('Requesting wallet connection...');
+      setCheckInStatus('Please confirm the wallet connection in the popup.');
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const address = await signer.getAddress();
+      const network = await provider.getNetwork();
+      const chainId = Number(network.chainId);
+      setUserAddress(address);
+      setIsWalletConnected(true);
+      setIsAllowedAddress(allowedAddresses.includes(address.toLowerCase()));
+      setCurrentNetwork(
+        chainId === NETWORKS.celo.chainId
+          ? 'celo'
+          : chainId === NETWORKS.lisk.chainId
+          ? 'lisk'
+          : null
+      );
+      console.log('Wallet connected:', {
+        address,
+        isAllowed: allowedAddresses.includes(address.toLowerCase()),
+        chainId,
+        network:
+          chainId === NETWORKS.celo.chainId
+            ? 'Celo'
+            : chainId === NETWORKS.lisk.chainId
+            ? 'Lisk'
+            : 'Unknown',
+      });
+      setCheckInStatus('Wallet connected successfully!');
+    } catch (error) {
+      const { code, message } = getErrorInfo(error);
+      console.error('Wallet connection failed:', { code, message, fullError: error });
+      setCheckInStatus(
+        code === 4001 ? 'Wallet connection rejected by user.' : 'Failed to connect wallet. Please try again.'
+      );
+    }
+  };
 
   const fetchQuizzes = async () => {
     try {
@@ -89,85 +269,156 @@ export default function Home() {
   };
 
   const handleCheckIn = async () => {
-    if (!isConnected || !userAddress) {
-      toast.error('Please connect your wallet.');
+    if (!window.ethereum) {
+      setCheckInStatus('Please install MetaMask or a compatible Web3 wallet.');
       return;
     }
+
+    if (!isWalletConnected) {
+      setCheckInStatus('Please connect your wallet.');
+      await connectWallet();
+      return;
+    }
+
+    if (!isAllowedAddress) {
+      setCheckInStatus('Your wallet address is not authorized to perform this action.');
+      return;
+    }
+
+    if (!currentNetwork) {
+      setCheckInStatus('Please switch to either the Celo or Celo Alfajores network.');
+      return;
+    }
+
     if (!contractAddress) {
-      toast.error('Contract address is not configured.');
+      setCheckInStatus('Contract address is not configured.');
       console.error('NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS is missing.');
       return;
     }
-    if (typeof window === 'undefined' || !window.ethereum) {
-      toast.error('No wallet provider detected.');
-      return;
-    }
-  
+
     setIsCheckingIn(true);
+    setCheckInStatus('');
+
     try {
+      console.log('Starting check-in process...');
       const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      console.log('Signer:', signer);
       const network = await provider.getNetwork();
-      const currentChainId = Number(network.chainId);
-      
-      const supportedChains = [42220, 44787];
-      
-      if (!supportedChains.includes(currentChainId)) {
+      const chainId = Number(network.chainId);
+      console.log('Network chainId:', chainId);
+
+      // Ensure the wallet is on the correct network (Celo or Celo Alfajores)
+      const expectedChainId = NETWORKS[currentNetwork].chainId;
+      if (chainId !== expectedChainId) {
+        console.log('Network mismatch, attempting to switch...');
         try {
           await window.ethereum.request({
             method: 'wallet_switchEthereumChain',
-            params: [{ chainId: `0x${(42220).toString(16)}` }],
+            params: [{ chainId: `0x${expectedChainId.toString(16)}` }],
           });
-        } catch (switchError: any) {
-          if (switchError.code === 4902) {
-            try {
-              await window.ethereum.request({
-                method: 'wallet_switchEthereumChain',
-                params: [{ chainId: `0x${(44787).toString(16)}` }],
-              });
-            } catch (testnetError: any) {
-              throw new Error('Please switch to Celo network (mainnet or testnet).');
-            }
-          } else {
-            throw new Error('Please switch to Celo network.');
-          }
+        } catch (switchError) {
+          const { message } = getErrorInfo(switchError);
+          console.error('Network switch failed:', message);
+          setCheckInStatus(`Please switch to the ${NETWORKS[currentNetwork].name} network.`);
+          setIsCheckingIn(false);
+          return;
         }
       }
-  
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(contractAddress, QuizRewardsABI, signer);
+
+      const contract = new Contract(NETWORKS[currentNetwork].contractAddress, QuizRewardsABI, signer);
+      console.log('Contract instance created:', NETWORKS[currentNetwork].contractAddress);
+
       const walletClient = createWalletClient({
-        chain: currentChainId === 44787 ? celoAlfajores : celo,
+        chain: currentNetwork === 'lisk' ? celoAlfajores : celo,
         transport: custom(window.ethereum),
       });
-  
-      console.log('Calling checkIn on contract:', contractAddress);
-      const txHash = await sendTransactionWithDivvi(
-        contract,
-        'checkIn',
-        [],
-        walletClient,
-        provider
-      );
-      console.log('Check-in transaction hash:', txHash);
-  
-      toast.success('Successfully checked in! 🎉');
-    } catch (err: any) {
-      let errorMessage = err.message || 'Failed to check in';
-      if (err.code === 'INSUFFICIENT_FUNDS') {
-        errorMessage = 'Insufficient funds for gas. Please fund your wallet with CELO.';
-      } else if (err.message.includes('unknown function') || err.message.includes('INVALID_ARGUMENT')) {
-        errorMessage = 'Check-in function not found. Please verify the contract address and ABI.';
-        console.error('Contract ABI mismatch or incorrect address:', contractAddress, err);
-      } else if (err.message.includes('already checked in')) {
-        errorMessage = 'You have already checked in today.';
+
+      let txHash;
+      if (currentNetwork === 'celo' || currentNetwork === 'lisk') {
+        console.log(`Submitting transaction with Divvi for ${NETWORKS[currentNetwork].name}`);
+        txHash = await sendTransactionWithDivvi(
+          contract,
+          'checkIn',
+          [],
+          walletClient,
+          provider
+        );
+        console.log(`${NETWORKS[currentNetwork].name} transaction sent:`, txHash);
+      } else {
+        const tx = await contract.checkIn();
+        txHash = tx.hash;
+        console.log('Transaction sent:', txHash);
       }
-      console.error('Check-in error:', err);
-      toast.error(errorMessage);
-      setError(errorMessage);
+
+      // Wait for transaction confirmation
+      const receipt = await provider.waitForTransaction(txHash);
+      console.log('Transaction confirmed:', receipt.transactionHash);
+      const timestamp = new Date().toLocaleString('en-US', { timeZone: 'Africa/Lagos' });
+      const balanceWei = await provider.getBalance(userAddress);
+      const balanceEther = ethers.formatEther(balanceWei);
+
+      setCheckInStatus(
+        `Successfully added to Drop List on ${NETWORKS[currentNetwork].name}. ${timestamp}! Balance: ${Number.parseFloat(balanceEther).toFixed(4)} ${currentNetwork === 'celo' ? 'CELO' : 'LSK'}`
+      );
+      toast.success('Successfully checked in! 🎉');
+
+      if (currentNetwork === 'celo' || currentNetwork === 'lisk') {
+        console.log('Attempting to report transaction to Divvi:', {
+          txHash,
+          chainId,
+          timestamp,
+          userAddress,
+          balance: `${balanceEther} ${currentNetwork === 'celo' ? 'CELO' : 'LSK'}`,
+        });
+        try {
+          await reportTransactionToDivvi(txHash, chainId);
+          console.log('Divvi reporting successful');
+          setIsDivviSubmitted(true);
+        } catch (divviError) {
+          const { message } = getErrorInfo(divviError);
+          console.error('Divvi reporting failed, but check-in completed:', message);
+          setCheckInStatus(
+            `Checked in on ${NETWORKS[currentNetwork].name} at ${timestamp} with balance ${Number.parseFloat(balanceEther).toFixed(4)} ${currentNetwork === 'celo' ? 'CELO' : 'LSK'}, but failed to report to Divvi. Please contact support.`
+          );
+          console.log('Continuing with auto-trigger despite Divvi error');
+        }
+      } else {
+        setIsDivviSubmitted(true);
+      }
+
+      setTimeout(() => setIsDivviSubmitted(false), 1000);
+    } catch (error) {
+      const { code, message } = getErrorInfo(error);
+      console.error('Check-in failed:', { code, message, fullError: error });
+
+      let statusMessage = 'Check-in failed: Please try again.';
+      if (code === 'INSUFFICIENT_FUNDS') {
+        statusMessage = 'Check-in failed: Insufficient funds in your wallet.';
+      } else if (code === 4001) {
+        statusMessage = 'Check-in failed: Transaction rejected by user.';
+      } else if (message.includes('already checked in')) {
+        statusMessage = 'You have already checked in today.';
+      } else if (message) {
+        statusMessage = `Check-in failed: ${message}`;
+      }
+
+      setCheckInStatus(statusMessage);
+      toast.error(statusMessage);
+
+      if (code !== 4001) {
+        console.log('Non-user-rejection error, keeping auto-trigger active');
+      } else {
+        setIsDivviSubmitted(false);
+      }
     } finally {
       setIsCheckingIn(false);
     }
   };
+
+  useEffect(() => {
+    fetchQuizzes();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-black text-white py-6 sm:py-12 px-4 sm:px-6 lg:px-8">
@@ -199,7 +450,7 @@ export default function Home() {
             </Link>
             <button
               onClick={handleCheckIn}
-              disabled={isCheckingIn || !isConnected}
+              disabled={isCheckingIn || !isWalletConnected || !isAllowedAddress}
               className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-green-400 to-teal-400 hover:from-green-500 hover:to-teal-500 text-black font-semibold rounded-full transition-all duration-300 disabled:bg-gray-600 text-sm sm:text-base"
             >
               {isCheckingIn ? 'Checking In...' : '✅ Check In'}
@@ -207,9 +458,9 @@ export default function Home() {
           </div>
         </header>
 
-        {(error || walletError) && (
+        {(error || walletError || checkInStatus) && (
           <div className="mb-6 sm:mb-8 p-4 bg-red-500/20 text-red-300 rounded-lg text-center text-sm sm:text-base">
-            {error || walletError}
+            {error || walletError || checkInStatus}
           </div>
         )}
 
@@ -217,7 +468,7 @@ export default function Home() {
           <ConnectWallet
             className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold rounded-lg transition-all px-4 py-2 text-sm sm:text-base"
           />
-          {isConnected && selectedQuiz && (
+          {isWalletConnected && selectedQuiz && (
             <div className="w-full sm:w-auto">
               <ShareToWarpcast
                 quizTitle={selectedQuiz.title}

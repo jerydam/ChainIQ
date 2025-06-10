@@ -4,6 +4,7 @@ import { useWallet } from '@/components/context/WalletContext';
 import { useWalletConnection } from '@/hook/useWallet';
 import { SignInButton } from '@farcaster/auth-kit';
 import '@farcaster/auth-kit/styles.css';
+import Image from 'next/image';
 
 interface ConnectWalletProps {
   className?: string;
@@ -26,9 +27,14 @@ export function ConnectWallet({ className }: ConnectWalletProps) {
           </span>
           <button
             onClick={disconnectWallet}
-            className="px-3 py-1 bg-red-500/20 text-red-400 rounded text-sm hover:bg-red-500/30 transition-colors"
+            className="px-3 py-1  rounded text-sm hover:bg-red-500/30 transition-colors"
           >
-            Disconnect
+            <Image
+              src="/images.png"
+              alt="Disconnect"
+              width={16}
+              height={16}
+              />
           </button>
         </div>
       ) : isFarcaster ? (
