@@ -21,12 +21,12 @@ const NETWORKS = {
   celo: {
     chainId: 42220,
     name: 'Celo',
-    contractAddress: process.env.NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS || '',
+    contractAddress: process.env.NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS || '0x1db5c46F865AD2fb7cBa62FCe1C22a66c60d698E',
   },
   lisk: {
     chainId: 44787,
     name: 'Celo Alfajores',
-    contractAddress: process.env.NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS || '',
+    contractAddress: process.env.NEXT_PUBLIC_QUIZ_CONTRACT_ADDRESS || '0x1db5c46F865AD2fb7cBa62FCe1C22a66c60d698E',
   },
 };
 
@@ -452,7 +452,7 @@ export default function Home() {
             </Link>
             <button
               onClick={handleCheckIn}
-              disabled={isCheckingIn || !isWalletConnected || !isAllowedAddress}
+              disabled={isCheckingIn || !isWalletConnected}
               className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-green-400 to-teal-400 hover:from-green-500 hover:to-teal-500 text-black font-semibold rounded-full transition-all duration-300 disabled:bg-gray-600 text-sm sm:text-base"
             >
               {isCheckingIn ? 'Checking In...' : '✅ Check In'}
