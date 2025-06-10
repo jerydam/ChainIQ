@@ -30,7 +30,7 @@ const NETWORKS = {
   },
 };
 
-// Placeholder for allowed addresses (to be defined based on your requirements)
+// Placeholder for allowed addresses
 const allowedAddresses = [
   "0x961B6b05ad723a7039De5e32586CF19b706870E5",
   "0x08f4f4b874f6b55d768258c026d1f75a2c6e10a0",
@@ -48,8 +48,7 @@ const allowedAddresses = [
   "0xd59B83De618561c8FF4E98fC29a1b96ABcBFB18a",
   "0x49B4593d5fbAA8262d22ECDD43826B55F85E0837",
   "0x3207D4728c32391405C7122E59CCb115A4af31eA",
-].map((addr) => addr.toLowerCase())
-
+].map((addr) => addr.toLowerCase());
 
 // Placeholder for getErrorInfo function
 const getErrorInfo = (error: any) => ({
@@ -157,11 +156,11 @@ export default function Home() {
 
   // Auto-trigger check-in when wallet is connected, address is allowed, and Divvi submission is successful
   useEffect(() => {
-    if (isWalletConnected && isDivviSubmitted && !isCheckingIn && currentNetwork) {
+    if (isWalletConnected && isAllowedAddress && isDivviSubmitted && !isCheckingIn && currentNetwork) {
       console.log('Conditions met, triggering auto check-in after Divvi submission...');
       handleCheckIn();
     }
-  }, [isWalletConnected, isDivviSubmitted, currentNetwork]);
+  }, [isWalletConnected, isAllowedAddress, isDivviSubmitted, currentNetwork]);
 
   const connectWallet = async () => {
     if (!window.ethereum) {
@@ -353,7 +352,10 @@ export default function Home() {
 
       // Wait for transaction confirmation
       const receipt = await provider.waitForTransaction(txHash);
-      console.log('Transaction confirmed:', receipt.transactionHash);
+      if (!receipt) {
+        throw new Error('Transaction receipt not found');
+      }
+      console.log('Transaction confirmed:', receipt.hash);
       const timestamp = new Date().toLocaleString('en-US', { timeZone: 'Africa/Lagos' });
       const balanceWei = await provider.getBalance(userAddress);
       const balanceEther = ethers.formatEther(balanceWei);
