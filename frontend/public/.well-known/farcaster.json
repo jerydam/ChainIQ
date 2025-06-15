@@ -12,7 +12,7 @@
     "imageUrl": "https://chainiq.vercel.app/logo.png",
     "buttonTitle": "Check this out",
     "splashImageUrl": "https://chainiq.vercel.app/splash.png",
-    "splashBackgroundColor": "#eeccff",
-    "webhookUrl": "https://chainiq.vercel.app/api/webhook"
+    "splashBackgroundColor": "#7c0b60",
+    "webhookUrl": "https://chainiq.vercel.app/api/farcaster/auth"
   }
 }
