@@ -108,13 +108,13 @@ export async function POST(req: NextRequest) {
     await supabase.from('frame_states').upsert({
       userId,
       quizId,
-      state: frameState,
+      state: JSON.stringify(frameState),
       createdAt: new Date().toISOString(),
     });
 
     let html: string;
     if (frameState.currentIndex >= quiz.questions.length) {
-      const imageUrl = `${process.env.NEXT_PUBLIC_API_URL || 'https://chainiq.vercel.app/'}/api/frames/quiz/image?quizId=${quizId}&score=${frameState.score}&total=${quiz.questions.length}`;
+      const imageUrl = `${process.env.NEXT_PUBLIC_API_URL || 'https://chainiq.vercel.app'}/api/frames/quiz/image?quizId=${quizId}&score=${frameState.score}&total=${quiz.questions.length}`;
       html = `
         <!DOCTYPE html>
         <html>
@@ -123,10 +123,10 @@ export async function POST(req: NextRequest) {
             <meta property="fc:frame:image" content="${imageUrl}" />
             <meta property="fc:frame:button:1" content="Back to Home" />
             <meta property="fc:frame:button:1:action" content="link" />
-            <meta property="fc:frame:button:1:target" content="${process.env.NEXT_PUBLIC_API_URL || 'https://chainiq.vercel.app/'}" />
+            <meta property="fc:frame:button:1:target" content="${process.env.NEXT_PUBLIC_API_URL || 'https://chainiq.vercel.app'}" />
             <meta property="fc:frame:button:2" content="Share Score" />
             <meta property="fc:frame:button:2:action" content="link" />
-            <meta property="fc:frame:button:2:target" content="https://warpcast.com/~/compose?text=I scored ${frameState.score}/${quiz.questions.length} on ${quiz.title}! Try it: ${process.env.NEXT_PUBLIC_API_URL || 'https://chainiq.vercel.app/'}/quiz/${quizId}" />
+            <meta property="fc:frame:button:2:target" content="https://warpcast.com/~/compose?text=I scored ${frameState.score}/${quiz.questions.length} on ${quiz.title}! Try it: ${process.env.NEXT_PUBLIC_API_URL || 'https://chainiq.vercel.app'}/quiz/${quizId}" />
           </head>
           <body>
             <h1>Quiz Complete!</h1>
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
         </html>
       `;
     } else {
-      const imageUrl = `${process.env.NEXT_PUBLIC_API_URL || 'https://chainiq.vercel.app/'}/api/frames/quiz/image?quizId=${quizId}&question=${encodeURIComponent(currentQuestion.question)}`;
+      const imageUrl = `${process.env.NEXT_PUBLIC_API_URL || 'https://chainiq.vercel.app'}/api/frames/quiz/image?quizId=${quizId}&question=${encodeURIComponent(currentQuestion.question)}`;
       const nextState = JSON.stringify(frameState);
       html = `
         <!DOCTYPE html>
@@ -147,7 +147,7 @@ export async function POST(req: NextRequest) {
             <meta property="fc:frame:button:2" content="${currentQuestion.options[1]}" />
             <meta property="fc:frame:button:3" content="${currentQuestion.options[2]}" />
             <meta property="fc:frame:button:4" content="${currentQuestion.options[3]}" />
-            <meta property="fc:frame:post_url" content="${process.env.NEXT_PUBLIC_API_URL || 'https://chainiq.vercel.app/'}/api/frames/quiz?quizId=${quizId}" />
+            <meta property="fc:frame:post_url" content="${process.env.NEXT_PUBLIC_API_URL || 'https://chainiq.vercel.app'}/api/frames/quiz?quizId=${quizId}" />
             <meta property="fc:frame:state" content="${encodeURIComponent(nextState)}" />
           </head>
           <body>
@@ -192,9 +192,9 @@ export async function GET(req: NextRequest) {
       <html>
         <head>
           <meta property="fc:frame" content="vNext" />
-          <meta property="fc:frame:image" content="${process.env.NEXT_PUBLIC_API_URL || 'https://chainiq.vercel.app/'}/api/frames/quiz/image?quizId=${quizId}" />
+          <meta property="fc:frame:image" content="${process.env.NEXT_PUBLIC_API_URL || 'https://chainiq.vercel.app'}/api/frames/quiz/image?quizId=${quizId}" />
           <meta property="fc:frame:button:1" content="Start Quiz" />
-          <meta property="fc:frame:post_url" content="${process.env.NEXT_PUBLIC_API_URL || 'https://chainiq.vercel.app/'}/api/frames/quiz?quizId=${quizId}" />
+          <meta property="fc:frame:post_url" content="${process.env.NEXT_PUBLIC_API_URL || 'https://chainiq.vercel.app'}/api/frames/quiz?quizId=${quizId}" />
         </head>
         <body>
           <h1>${quiz.title}</h1>
