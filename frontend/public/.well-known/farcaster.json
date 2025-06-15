@@ -1,30 +1,18 @@
 {
   "accountAssociation": {
-    "header": "",
-    "payload": "",
-    "signature": ""
+    "header": "eyJmaWQiOjgxMjkzMCwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDVDZTU3NTZmQzQ0NDA3RDlDMTRFYTZGODA4RGMxNzg1Yjg3ZTE4YzAifQ",
+    "payload": "eyJkb21haW4iOiJjaGFpbmlxLnZlcmNlbC5hcHAifQ",
+    "signature": "MHhiZjVjYWQ1YTg4YWRlNDA5ZmFjNjc3NGUxMmFmYzY0ZmMzZGVkODJjN2E4NmEzOGEwNjQ5ZjBkOWJkMTM0NDU0NzNiZDU4NTg4NmRjZGYwYzQ1NWU0YzAyZjM5NTRkNDg2ZjJjZjM1MTM2ZDc3NTA5MGEzZWEyZjU2MjA5ZDBlMTFj"
   },
   "frame": {
-    "version": "vNext",
-    "name": "chainIQ",
+    "version": "1",
+    "name": "ChainIQ",
     "iconUrl": "https://chainiq.vercel.app/favicon.png",
     "homeUrl": "https://chainiq.vercel.app",
+    "imageUrl": "https://chainiq.vercel.app/logo.png",
+    "buttonTitle": "Check this out",
     "splashImageUrl": "https://chainiq.vercel.app/splash.png",
-    "splashBackgroundColor": "#1a202c",
-    "subtitle": "Learn and earn on Celo",
-    "description": "Take quizzes, earn rewards, and mint NFTs on the Celo blockchain with chainIQ.",
-    "screenshotUrls": [
-      "https://chainiq.vercel.app/screenshot1.png",
-      "https://chainiq.vercel.app/screenshot2.png"
-    ],
-    "primaryCategory": "education",
-    "tags": ["quiz", "blockchain", "celo", "education", "rewards"],
-    "heroImageUrl": "https://chainiq.vercel.app/hero.png",
-    "tagline": "Learn, Earn, Mint NFTs",
-    "ogTitle": "chainIQ",
-    "ogDescription": "Take quizzes and earn rewards on Celo!",
-    "ogImageUrl": "https://chainiq.vercel.app/logo.png",
-    "requiredChains": ["eip155:42220"],
-    "requiredCapabilities": ["actions.signIn", "wallet.getEthereumProvider"]
+    "splashBackgroundColor": "#eeccff",
+    "webhookUrl": "https://chainiq.vercel.app/api/webhook"
   }
 }
