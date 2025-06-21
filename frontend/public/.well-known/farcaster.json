@@ -7,12 +7,37 @@
   "frame": {
     "version": "1",
     "name": "ChainIQ",
-    "iconUrl": "https://chainiq.vercel.app/favicon.png",
+    "iconUrl": "https://chainiq.vercel.app/images/mini-app-icon-1024x1024.png",
     "homeUrl": "https://chainiq.vercel.app",
-    "imageUrl": "https://chainiq.vercel.app/logo.png",
-    "buttonTitle": "Check this out",
-    "splashImageUrl": "https://chainiq.vercel.app/splash.png",
+    "splashImageUrl": "https://chainiq.vercel.app/images/splash.png",
     "splashBackgroundColor": "#7c0b60",
-    "webhookUrl": "https://chainiq.vercel.app/api/farcaster/auth"
+    "webhookUrl": "https://chainiq.vercel.app/api/farcaster/auth",
+    "subtitle": "Challenge your knowledge of blockchain.",
+    "description": "ChainIQ is a Farcaster Mini App that provides insights into blockchain data. Explore on-chain information and enhance your understanding of the crypto ecosystem.",
+    "shortDescription": "Explore blockchain data and Farcaster profiles.",
+    "shortTitle": "ChainIQ",
+    "screenshotUrls": [
+      "https://chainiq.vercel.app/images/screenshot1.png",
+      "https://chainiq.vercel.app/images/screenshot2.png"
+    ],
+    "primaryCategory": "utility",
+    "tags": [
+      "blockchain",
+      "crypto",
+      "farcaster",
+      "data"
+    ],
+    "heroImageUrl": "https://chainiq.vercel.app/images/hero.png",
+    "tagline": "Discover insights on-chain.",
+    "ogTitle": "ChainIQ - On-chain Insights",
+    "ogDescription": "Explore blockchain data and Farcaster profiles with ChainIQ.",
+    "ogImageUrl": "https://chainiq.vercel.app/images/og.png",
+    "requiredChains": [
+      "eip155:10"
+    ],
+    "requiredCapabilities": [
+      "actions.signIn",
+      "wallet.getEthereumProvider"
+    ]
   }
 }

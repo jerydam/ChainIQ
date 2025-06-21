@@ -210,7 +210,7 @@ export async function POST(req: NextRequest) {
             'Authorization': `Bearer ${process.env.PINATA_JWT}`,
             'Content-Type': 'multipart/form-data'
           },
-          timeout: 30000, // 30 second timeout
+          timeout: 90000, // 90 second timeout
         }
       );
 
