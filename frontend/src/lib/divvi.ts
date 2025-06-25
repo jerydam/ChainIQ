@@ -10,7 +10,7 @@ export interface DivviConfig {
 }
 
 const divviConfig: DivviConfig = {
-  consumer: '0xdA404bFDA2a5dCDa88FD2aa9B9e0C32a677bc8eB',
+  consumer: '0x22Db5Ade0850A5342729D519F4A4b556BCbbC572',
   providers: [
     '0x0423189886d7966f0dd7e7d256898daeee625dca',
     '0xc95876688026be9d6fa7a7c33328bd013effa2bb',
